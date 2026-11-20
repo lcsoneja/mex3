@@ -6838,6 +6838,27 @@ def elevenlabs_usage(api_key: str) -> dict[str, Any]:
     return data
 
 
+def apply_pi_profile(settings: Settings) -> Settings:
+    """Overlay pi_profile.json when SONJ_PROFILE=pi (light models for a 4 GB Pi)."""
+    path = BASE / "pi_profile.json"
+    try:
+        prof = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return settings
+    asr = prof.get("asr") or {}
+    if asr.get("backend"):
+        settings.asr_backend = str(asr["backend"])
+    tts = prof.get("tts") or {}
+    if tts.get("voice"):
+        voice = "Neural: " + str(tts["voice"])
+        settings.tts_voice = voice
+        settings.nova_voice = voice
+        settings.piattos_voice = voice
+    if prof.get("idle_unload_s"):
+        settings.idle_unload_s = float(prof["idle_unload_s"])
+    return settings
+
+
 def load_settings() -> Settings:
     """Config file wins over defaults; CLI flags win over both."""
     settings = Settings()
@@ -6851,6 +6872,8 @@ def load_settings() -> Settings:
                     setattr(settings, key, value)
         except (OSError, ValueError) as exc:
             print(f"[config] ignoring unreadable {CONFIG_PATH.name}: {exc}")
+    if os.environ.get("SONJ_PROFILE", "").strip().lower() == "pi":
+        settings = apply_pi_profile(settings)
     if not settings.openrouter_key:
         found = find_openrouter_key()
         if found:

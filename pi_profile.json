@@ -25,5 +25,5 @@
   "memory_budget_gb": 1.2,
   "memory_budget_mb": 1200,
   "comment": "The laptop stays on its existing Kokoro voices; this Pi profile selects Piper VITS.",
-  "server_integration_note": "Applying this overlay inside server.py load_settings() is a planned change owned by the lead. SONJ currently hands SONJ_PROFILE=pi to the child process; this profile documents the intended settings."
+  "server_integration_note": "Implemented: server.py load_settings() applies this overlay when SONJ_PROFILE=pi, and install.py --pi also writes these light-model settings into config.json."
 }
