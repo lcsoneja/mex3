@@ -143,12 +143,13 @@ def main() -> int:
         failures += 0 if ok else 1
         print(f"  [{'PASS' if ok else 'FAIL'}] {title:58s} {detail}")
 
-    # 1-2. the app's own voice, exactly what the live session produced
+    # 1-2. the app's own voice with Auto-Interrupt ON (echo check increments echo_drops)
     for title, transcript in (
         ("own voice, transcript equals the reply", REPLY),
         ("own voice, fuzzier transcript", "Yes I hear you I am here and ready to help"),
     ):
         h = _Harness(transcript)
+        h.session.settings.instant_barge = True
         h.judge()
         report(
             title,
@@ -276,9 +277,9 @@ def main() -> int:
         f"cuts={len(h.cuts)}",
     )
 
-    # 11. no words in the captured audio cannot cut a reply: a check that cannot hear
-    # content must not fail open (found by the verification audit).
+    # 11. no words in the captured audio cannot cut a reply even with Auto-Interrupt ON
     h = _Harness("")
+    h.session.settings.instant_barge = True
     h.judge()
     report("empty transcript cannot cut a reply", not h.cuts, f"cuts={len(h.cuts)}")
 
