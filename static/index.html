@@ -115,6 +115,15 @@ details.think .bd{padding:4px 12px 8px;max-height:200px;overflow:auto}
 .k-tool_result{color:var(--dim)}
 .k-compact,.k-retry{color:var(--warn)}
 .k-pi{color:var(--ok)}
+/* instant hover tooltip for topbar buttons (0ms delay, always readable) */
+.topbar{position:relative}
+.topbar [data-tip]{position:relative}
+.topbar [data-tip]:hover::after,.topbar [data-tip]:focus-visible::after{
+  content:attr(data-tip);position:fixed;top:54px;right:14px;max-width:440px;white-space:normal;
+  background:var(--panel);color:var(--text);border:1px solid var(--accent);border-radius:10px;
+  padding:8px 11px;font-size:12px;line-height:1.45;font-weight:400;text-align:left;
+  box-shadow:0 10px 30px rgba(0,0,0,.55);z-index:95;pointer-events:none;
+}
 /* interrupt countdown chip */
 #btn-count{display:none;align-items:center;gap:6px}
 #btn-count.on{display:inline-flex}
@@ -315,19 +324,19 @@ details.think .bd{padding:4px 12px 8px;max-height:200px;overflow:auto}
   <header class="topbar">
     <span class="brand"><i>›</i> SONJ4</span>
     <span class="pill num" id="pill-session">New Chat</span>
-    <button class="btn" id="btn-new-session" type="button" title="Start a fresh chat session">+ New Chat</button>
+    <button class="btn" id="btn-new-session" type="button" title="Start a fresh conversation thread (older chats remain saved in Sessions)." data-tip="New Chat: Starts a fresh conversation thread while keeping your older sessions saved in Sessions.">+ New Chat</button>
     <span class="pill" id="pill-speaker">idle</span>
     <span class="grow"></span>
     <span class="pill num" id="pill-spend">$0.0000</span>
-    <button class="btn" id="btn-model">model: …</button>
-    <button class="btn" id="btn-listen" title="hands-free listening">⏵ Listen</button>
-    <button class="btn danger" id="btn-barge" title="cut the reply now">■ Stop</button>
-    <button class="btn" id="btn-count" title="The reply is playing — click to interrupt now. Otherwise the agent finishes its whole answer.">⟳ interrupt<b id="count-secs"></b></button>
-    <button class="pill wake" id="btn-wake" title="wake gate: only Nova / Piattos starts a turn from idle">wake: off</button>
-    <button class="pill wake on" id="btn-instant-barge" type="button" title="If user speaks, stop TTS + LLM and listen immediately (default ON)">🎙 Speak→Stop: ON</button>
-    <button class="pill wake" id="btn-front-only" type="button" title="Solo Front mode: only Front agent answers (disables Back/Doctor delegation)">👤 Front Only: off</button>
-    <button class="btn" id="btn-restart" type="button" title="Restart and reinitialize SONJ engine">↻ Restart</button>
-    <button class="btn" id="btn-theme">◐</button>
+    <button class="btn" id="btn-model" title="Choose which AI model powers the Front agent (Nova)." data-tip="Model Selector: Click to pick or search which AI model powers the Front agent (Nova).">model: …</button>
+    <button class="btn" id="btn-listen" title="Hands-Free Mic (Always-On Listening): Click to turn continuous listening ON or OFF. Uses Silero VAD to hear you automatically without push-to-talk." data-tip="Hands-Free Mic: Turns continuous always-on listening ON or OFF (uses Silero VAD so you can talk naturally without holding a key).">⏵ Listen</button>
+    <button class="btn danger" id="btn-barge" title="Stop / Interrupt Halfway: Immediately stops Nova from speaking, cancels the active LLM reply, drops queued audio, and returns to listening (keeps hands-free mic ON)." data-tip="Stop Reply Now: Immediately cuts Nova off mid-sentence or mid-thought, drops remaining TTS audio, cancels the in-flight LLM stream, and keeps your mic ready to listen.">■ Stop Reply</button>
+    <button class="btn" id="btn-count" title="Interrupt Now: Nova is thinking or speaking. Click once to stop this reply immediately (or send text typed in the box)." data-tip="Interrupt Active Turn: Click once to stop Nova right now (or immediately send the text you typed in the input box).">⟳ Stop Reply<b id="count-secs"></b></button>
+    <button class="pill wake" id="btn-wake" title="Wake Word Gate: OFF — Any voice starts a turn. ON — Nova waits until she hears her wake name (Nova or Piattos) before replying." data-tip="Wake Gate: OFF means any spoken sentence starts a turn. ON means Nova stays quiet from idle until you say 'Nova' or 'Piattos'.">wake: off</button>
+    <button class="pill wake on" id="btn-instant-barge" type="button" title="Auto-Interrupt (Speak While Nova Talks) is ON (Default). When you speak at any moment — even mid-reply or while thinking — Nova stops speaking, aborts her active LLM reply, and listens to you immediately. Click to turn OFF." data-tip="Auto-Interrupt: ON (Default) — Start talking at any moment (even mid-reply or mid-thought) and Nova immediately stops speaking/thinking and listens to you. OFF — Only stop words (stop, wait, cancel, pause) or ■ Stop Reply will interrupt.">🎙 Auto-Interrupt: ON</button>
+    <button class="pill wake" id="btn-front-only" type="button" title="Front Agent Only is OFF (Full Team Active). Nova handles quick chat directly and delegates multi-step coding, research, or repair work to the 5 Back workers and Doctor. Click to turn Front Only ON." data-tip="Front Only Mode: OFF (Full Team) — Nova delegates multi-step tasks to 5 Back workers and repairs to Doctor. ON (Solo Front) — ONLY Nova answers every request directly; Back workers & Doctor are paused.">👤 Front Only: OFF</button>
+    <button class="btn" id="btn-restart" type="button" title="Restart and reinitialize the SONJ4 engine, preserving your current session." data-tip="Restart Engine: Cleanly restarts SONJ4 and reloads this active conversation.">↻ Restart</button>
+    <button class="btn" id="btn-theme" title="Switch between Dark and Light interface theme." data-tip="Theme Toggle: Switch between Dark mode and Light mode.">◐</button>
     <div id="model-pop">
       <label style="font-size:11px;color:var(--dim)">model — grouped by provider, type to search</label>
       <input id="model-search" placeholder="search 400+ models… e.g. deepseek" style="width:100%;margin:6px 0">
@@ -623,19 +632,40 @@ function renderWaveAndHeader(s){
   const w = speakerWord(s); $('pill-speaker').textContent = w; $('pill-speaker').className = 'pill ' + toneOf(w);
   $('pill-mem').textContent = Math.round(s.memory_mb||0) + ' MB';
   $('pill-mic').textContent = 'mic ' + (s.mode||'off');
-  const wg = (s.settings || {}).wake_gate;
+  const wg = Boolean((s.settings || {}).wake_gate);
   const bw = $('btn-wake');
-  if (bw){ bw.textContent = 'wake: ' + (wg ? 'on' : 'off'); bw.className = 'pill wake' + (wg ? ' on' : ''); }
+  if (bw){
+    bw.textContent = 'wake: ' + (wg ? 'ON' : 'off');
+    bw.className = 'pill wake' + (wg ? ' on' : '');
+    const wtip = wg
+      ? "Wake Gate is ON: From idle, Nova waits until she hears 'Nova' or 'Piattos' before replying. Click to disable wake gate."
+      : "Wake Gate is OFF: Any speech starts a turn immediately. Click to require saying 'Nova' or 'Piattos' first.";
+    bw.title = wtip; bw.setAttribute('data-tip', wtip);
+  }
   const ib = (s.settings || {}).instant_barge !== false;
   const bib = $('btn-instant-barge');
-  if (bib){ bib.textContent = '🎙 Speak→Stop: ' + (ib ? 'ON' : 'off'); bib.className = 'pill wake' + (ib ? ' on' : ''); }
+  if (bib){
+    bib.textContent = '🎙 Auto-Interrupt: ' + (ib ? 'ON' : 'off');
+    bib.className = 'pill wake' + (ib ? ' on' : '');
+    const itip = ib
+      ? "Auto-Interrupt is ON (Default): As soon as you start speaking — even mid-reply or while thinking — Nova stops TTS playback, aborts her active LLM stream, and listens immediately. Click to switch OFF."
+      : "Auto-Interrupt is OFF: Talking over Nova will NOT interrupt unless you say a stop word (stop, wait, cancel, pause, quiet) or click ■ Stop Reply. Click to turn ON.";
+    bib.title = itip; bib.setAttribute('data-tip', itip);
+  }
   const fo = Boolean((s.settings || {}).front_only);
   const bfo = $('btn-front-only');
-  if (bfo){ bfo.textContent = '👤 Front Only: ' + (fo ? 'ON' : 'off'); bfo.className = 'pill wake' + (fo ? ' on' : ''); }
+  if (bfo){
+    bfo.textContent = '👤 Front Only: ' + (fo ? 'ON' : 'OFF');
+    bfo.className = 'pill wake' + (fo ? ' on' : '');
+    const ftip = fo
+      ? "Front Only is ON (Solo Mode): ONLY the Front agent (Nova) answers every request directly using her own tools — Back workers (back-1..5) and Doctor are blocked from taking tasks. Click to re-enable Full Team."
+      : "Front Only is OFF (Full Team Active): Nova answers quick chat directly and delegates multi-step coding, research, or repair tasks to the 5 Back workers and Doctor. Click to switch to Front Only.";
+    bfo.title = ftip; bfo.setAttribute('data-tip', ftip);
+  }
   const micMode = String(s.mode||'off');
   $('btn-mic').textContent = micMode === 'ptt' ? '■ Send' : '🎤';
   $('btn-mic').title = micMode === 'ptt' ? 'click to stop and send' : 'push to talk: click, speak, click to send';
-  $('btn-listen').textContent = micMode === 'continuous' ? '■ Listening' : '⏵ Listen';
+  $('btn-listen').textContent = micMode === 'continuous' ? '■ Mic ON' : '⏵ Listen';
 }
 
 /* transcript with inline tool cards */
@@ -1629,7 +1659,7 @@ function renderSettings(){
   echoToggle.checked = st.echo_cancellation !== false;
   const convVoice = el('select', {id:'conv-voice', style:'width:100%'}, (s.tts_voices || []).map(v => el('option', {value:v, text:v, selected:v === st.tts_voice ? '' : null})));
   const chatThink = el('select', {id:'chat-thinking'}, ['off','low','medium','high'].map(v => el('option', {value:v, text:v, selected:v === (st.chat_thinking || 'off') ? '' : null})));
-  const bargeStrict = el('select', {id:'barge-strictness'}, ['relaxed','normal','strict'].map(v => el('option', {value:v, text:v, selected:v === (st.barge_strictness || 'strict') ? '' : null})));
+  const bargeStrict = el('select', {id:'barge-strictness'}, ['relaxed','normal','strict'].map(v => el('option', {value:v, text:v, selected:v === (st.barge_strictness || 'normal') ? '' : null})));
   const wakeInt = el('input', {id:'wake-to-interrupt', type:'checkbox', style:'width:auto;margin-right:8px'});
   wakeInt.checked = Boolean(st.wake_to_interrupt);
   const vpOn = el('input', {id:'voiceprint-enabled', type:'checkbox', style:'width:auto;margin-right:8px'});
@@ -2353,10 +2383,13 @@ $('btn-listen').onclick = async () => {
   if (mode !== 'continuous') await api('/api/listen', {mode:'continuous'});
 };
 $('btn-barge').onclick = async () => {
-  /* context-aware: a push-to-talk recording is submitted; a speaking reply is cut */
+  /* Interrupt TTS + active LLM reply right away (never kill continuous mic just because s.recording=true during speech). */
   const s = await api('/api/state');
-  if (String((s && s.mode) || 'off') === 'ptt' || (s && s.recording)) await api('/api/stop', {});
-  else await api('/api/barge', {});
+  const mode = String((s && s.mode) || 'off');
+  const busy = Boolean(s && (s.speaking || s.status === 'speaking' || s.status === 'thinking'));
+  if (mode === 'ptt' && !busy){ await api('/api/stop', {}); return; }
+  await api('/api/barge', {});
+  await poll();
 };
 $('btn-count').onclick = () => fireCountdown();
 $('btn-lower').onclick = () => {
@@ -2510,8 +2543,8 @@ const _vu=$('btn-v-unlock'); if(_vu) _vu.onclick=async()=>{ await api('/api/voic
 const _vr=$('btn-v-reset'); if(_vr) _vr.onclick=async()=>{ await api('/api/voices/reset',{}); renderVoices(); };
 const _va=$('v-bg-always'); if(_va) _va.onchange=()=>api('/api/settings',{bg_voice_scan_always:Boolean(_va.checked)});
 const _bp0=$('chat-barge-pill'); if(_bp0) _bp0.onclick=()=>api('/api/settings',{wake_to_interrupt:!((state.settings||{}).wake_to_interrupt === true)});
-const _bib=$('btn-instant-barge'); if(_bib) _bib.onclick=async()=>{ const cur=(state.settings||{}).instant_barge !== false; const nxt=!cur; _bib.textContent='🎙 Speak→Stop: '+(nxt?'ON':'off'); _bib.className='pill wake'+(nxt?' on':''); await api('/api/settings',{instant_barge:nxt}); };
-const _bfo=$('btn-front-only'); if(_bfo) _bfo.onclick=async()=>{ const cur=Boolean((state.settings||{}).front_only); const nxt=!cur; _bfo.textContent='👤 Front Only: '+(nxt?'ON':'off'); _bfo.className='pill wake'+(nxt?' on':''); await api('/api/settings',{front_only:nxt}); };
+const _bib=$('btn-instant-barge'); if(_bib) _bib.onclick=async()=>{ const cur=(state.settings||{}).instant_barge !== false; const nxt=!cur; _bib.textContent='🎙 Auto-Interrupt: '+(nxt?'ON':'off'); _bib.className='pill wake'+(nxt?' on':''); await api('/api/settings',{instant_barge:nxt}); await poll(); };
+const _bfo=$('btn-front-only'); if(_bfo) _bfo.onclick=async()=>{ const cur=Boolean((state.settings||{}).front_only); const nxt=!cur; _bfo.textContent='👤 Front Only: '+(nxt?'ON':'OFF'); _bfo.className='pill wake'+(nxt?' on':''); await api('/api/settings',{front_only:nxt}); await poll(); };
 const _vt=$('v-thresh'); if(_vt){ _vt.oninput=()=>{ if($('v-thresh-val')) $('v-thresh-val').textContent=Number(_vt.value).toFixed(2); }; _vt.onchange=async()=>{ await api('/api/voices/threshold',{threshold:Number(_vt.value)}); if($('v-action-msg')) $('v-action-msg').textContent='strictness -> '+Number(_vt.value).toFixed(2); }; }
 const _ad=$('btn-ask-doctor'); if(_ad) _ad.onclick=askDoctorAboutError;
 const _md=$('mic-device'); if(_md) _md.onchange=()=>api('/api/device',{input_index:Number(_md.value)});

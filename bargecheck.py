@@ -156,10 +156,17 @@ def main() -> int:
             f"cuts={len(h.cuts)} echo_drops={h.session.echo_drops}",
         )
 
-    # 3. different words alone are not permission to cut: a stop word is required
+    # 3. when Auto-Interrupt (instant_barge) is OFF, a stop word is required
     h = _Harness("turn off the kitchen lights")
+    h.session.settings.instant_barge = False
     h.judge()
-    report("person, no stop word -> kept speaking", not h.cuts, f"cuts={len(h.cuts)}")
+    report("instant_barge=False, no stop word -> kept speaking", not h.cuts, f"cuts={len(h.cuts)}")
+
+    # 3a. when Auto-Interrupt (instant_barge) is ON (default), multi-word non-echo speech cuts!
+    h = _Harness("turn off the kitchen lights")
+    h.session.settings.instant_barge = True
+    h.judge()
+    report("instant_barge=True, real multi-word speech -> cuts", len(h.cuts) == 1, f"cuts={len(h.cuts)}")
 
     # 3b. a person saying a stop word cuts the reply
     h = _Harness("stop")
@@ -232,7 +239,7 @@ def main() -> int:
             True,
         ),
         (
-            "finished segment: no stop word keeps speaking",
+            "finished segment: no stop word keeps speaking (instant_barge=False)",
             "what time is it",
             MEASURED_ECHO_RMS,
             False,
@@ -245,6 +252,7 @@ def main() -> int:
         ),
     ):
         h = _Harness(transcript)
+        h.session.settings.instant_barge = False
         segment = np.full(16000, rms, dtype=np.float32)
         cut = h.session._should_cut_for(segment, rms, 1000.0, 2000.0)
         report(title, cut == expect_cut, f"cut={cut}")

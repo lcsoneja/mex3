@@ -246,6 +246,9 @@ BARGE_TRIGGER_WORDS = (
     "quiet",
     "enough",
     "shush",
+    "wait",
+    "pause",
+    "hold on",
 )
 
 # Re-check window: the content check needs ASR, so one continuous run is judged
@@ -733,7 +736,7 @@ class Settings:
     echo_cancellation: bool = True
     # Conversation tuning — owner-toggleable in Settings / Pipeline view.
     chat_thinking: str = "off"  # off|low|medium|high for chat/command turns
-    barge_strictness: str = "strict"  # relaxed|normal|strict
+    barge_strictness: str = "normal"  # relaxed|normal|strict
     wake_to_interrupt: bool = (
         False  # False=natural (any real speech interrupts); True=stop-word only
     )
@@ -956,6 +959,8 @@ class Session:
         self._last_user_speech_at: float = 0.0
         self._last_turn_clarified: bool = False
         self._thinking_since: float = 0.0
+        self._interrupt_seq: int = 0
+        self._think_speech_ms: float = 0.0
         self._voices_view_at: float = 0.0
         self._bg_scan_busy: bool = False
         self._echo_peak_rms: float = 0.0
@@ -2260,6 +2265,7 @@ class Session:
             "gate",
         )
         started = time.perf_counter()
+        turn_gen = self._interrupt_seq
         self._turn_started_at = started
         self._last_filler_ms = 0.0
         self._first_token_at = 0.0
@@ -2370,12 +2376,23 @@ class Session:
                     if stale is not None:
                         with contextlib.suppress(Exception):
                             stale.stop()
-                # W1.4 (D-12): a failed model no longer kills the turn. Walk the role's
-                # fallback chain: each fallback gets a fresh pane/agent and one attempt.
                 turn_state["done"] = True
                 if filler_timer is not None:
                     filler_timer.cancel()
                 self._stop_filler()
+                if self._interrupt_seq != turn_gen or self._speech_cut:
+                    with self.lock:
+                        self.status = "listening" if self.mode != "off" else "idle"
+                        self._speaking = False
+                    partial_said = pump.played_text() if pump is not None else ""
+                    recorded_cut = (
+                        f"{partial_said} (cut off)" if partial_said else "(cut off)"
+                    )
+                    return self._record_turn(
+                        text, source, recorded_cut, [], asr_ms, 0.0, 0.0, started
+                    )
+                # W1.4 (D-12): a failed model no longer kills the turn. Walk the role's
+                # fallback chain: each fallback gets a fresh pane/agent and one attempt.
                 reply = None
                 chain = self._role_fallback_chain()
                 primary_model = self.settings.model
@@ -2521,7 +2538,19 @@ class Session:
         tts_ms = 0.0
         stream_extras: dict[str, Any] = {}
         recorded = reply.text
-        if reply.text and self.settings.tts_enabled and not reply.error:
+        if self._interrupt_seq != turn_gen or self._speech_cut:
+            spoken_cut = pump.played_text() if pump is not None else ""
+            if spoken_cut:
+                recorded = f"{spoken_cut} (cut off)"
+            elif not recorded:
+                recorded = "(cut off)"
+            if pump is not None:
+                pump.stop()
+                self._pump = None
+            with self.lock:
+                self._speaking = False
+                self.status = "listening" if self.mode != "off" else "idle"
+        elif reply.text and self.settings.tts_enabled and not reply.error:
             if pump is not None:
                 # M2.2: the sentences were already spoken while the model was still
                 # generating. Let the queue drain, then record what was actually
@@ -2857,7 +2886,9 @@ class Session:
                     "tokens_out": int((extra or {}).get("tokens") or 0),
                     "tok_per_s": float((extra or {}).get("tok_per_s") or 0.0),
                     "context_chars": int(getattr(self, "_last_context_chars", 0)),
-                    "context_tokens_est": int(getattr(self, "_last_context_chars", 0) // 4),
+                    "context_tokens_est": int(
+                        getattr(self, "_last_context_chars", 0) // 4
+                    ),
                     "e2e_ms": (
                         round(
                             max(0.0, (started - self._utterance_end_at) * 1000.0)
@@ -3014,7 +3045,9 @@ class Session:
                 if not speaking_now and not self.recording:
                     self._voiceprint.update_noise_floor(blk_rms)
                 if speaking_now:
-                    self._echo_peak_rms = max(self._echo_peak_rms * 0.995, blk_rms)
+                    self._echo_peak_rms = max(self._echo_peak_rms * 0.96, blk_rms)
+                else:
+                    self._echo_peak_rms = 0.0
 
                 if mode == "ptt":
                     buffer.append(block)
@@ -3037,12 +3070,12 @@ class Session:
                         self._speech_run.clear()
                         continue
                     rms_blk = float(np.sqrt(np.mean(np.square(block))) or 0.0)
-                    if rms_blk >= 0.02:
+                    if rms_blk >= 0.014:
                         self._speech_run.append(block)
                         self._barge_silence = 0
                     else:
                         self._barge_silence += 1
-                        if self._barge_silence > 10:
+                        if self._barge_silence > 12:
                             self._speech_run.clear()
                             self._barge_burst_counted = False
                             self._barge_judged_at = 0.0
@@ -3107,6 +3140,22 @@ class Session:
                     live_ring.append(block)
                     if len(live_ring) > 560:
                         live_ring = live_ring[-560:]
+                    if (
+                        self.status == "thinking"
+                        and getattr(self.settings, "instant_barge", True)
+                        and self.settings.barge_in
+                    ):
+                        self._think_speech_ms += (len(block) / 16.0)
+                        if self._think_speech_ms >= 190.0 and blk_rms >= max(
+                            0.024, self.settings.barge_rms * 0.5
+                        ):
+                            log_event(
+                                f"instant live barge while thinking ({self._think_speech_ms:.0f}ms, rms={blk_rms:.3f}) — aborting LLM stream"
+                            )
+                            self._think_speech_ms = 0.0
+                            self.interrupt()
+                    else:
+                        self._think_speech_ms = 0.0
                     if not self._mic_is_scripted:
                         partial_audio = detector.partial()
                         if partial_audio is None or len(partial_audio) < 4800:
@@ -3119,6 +3168,7 @@ class Session:
                             self._kick_live_asr(partial_audio)
                 else:
                     live_ring.clear()
+                    self._think_speech_ms = 0.0
 
                 emitted_seg = False
                 for segment in detector.segments():
@@ -3170,7 +3220,9 @@ class Session:
                         and self.settings.barge_in
                         and rms >= max(0.03, self.settings.barge_rms)
                     ):
-                        log_event("instant barge while thinking — aborting LLM stream to listen")
+                        log_event(
+                            "instant barge while thinking — aborting LLM stream to listen"
+                        )
                         self.interrupt()
                     self._pending.put(("speech", segment))
 
@@ -3853,21 +3905,35 @@ class Session:
             log_event("kept speaking - no words in the captured audio, so not a person")
             return True
         if not is_echo(heard, spoken, recent=True):
-            # Different words, so not our own voice - but that alone is not permission
-            # to cut: the "of" episode came through here. A person stops the assistant
-            # by saying so, so require a trigger word (configurable in settings).
+            # Different words, so not our own voice. Protect against single non-stop
+            # artifacts (like "of") and hallucinated noise. When instant_barge is ON
+            # (and stop-word-only mode is OFF), any real multi-word non-echo speech
+            # interrupts immediately — not only literal "stop" words.
             word = _heard_trigger(heard, tuple(self.settings.barge_triggers))
-            if word is None:
-                with self.lock:
-                    self.ignored_while_speaking += 1
+            if word is not None:
+                log_event(f"stop word {word!r} heard - cutting the reply")
+                self._think(f"you said {word!r} - stopping", "you")
+                return False
+            words_tok = [t for t in re.findall(r"[a-zA-Z0-9']+", heard) if t]
+            instant = bool(getattr(self.settings, "instant_barge", True))
+            if (
+                instant
+                and not self.settings.wake_to_interrupt
+                and not self._is_noise_transcript(heard)
+                and (len(words_tok) >= 2 or len(heard.strip()) >= 8)
+            ):
                 log_event(
-                    f"kept speaking - heard {heard[:50]!r} but no stop word in it"
+                    f"instant speech barge accepted ({heard[:50]!r}) - cutting reply"
                 )
-                self._think(f"kept speaking - {heard[:40]!r} has no stop word", "echo")
-                return True
-            log_event(f"stop word {word!r} heard - cutting the reply")
-            self._think(f"you said {word!r} - stopping", "you")
-            return False
+                self._think(f"you spoke ({heard[:40]!r}) - stopping to listen", "you")
+                return False
+            with self.lock:
+                self.ignored_while_speaking += 1
+            log_event(
+                f"kept speaking - heard {heard[:50]!r} but no stop word in it"
+            )
+            self._think(f"kept speaking - {heard[:40]!r} has no stop word", "echo")
+            return True
         with self.lock:
             self.echo_drops += 1
             self._barge_echo_checks += 1
@@ -3918,23 +3984,23 @@ class Session:
                 1.2,
             )
         if self.settings.echo_cancellation:
-            mode = str(getattr(self.settings, "barge_strictness", "strict") or "strict")
+            mode = str(getattr(self.settings, "barge_strictness", "normal") or "normal")
             if mode == "relaxed":
                 return (
-                    max(self.settings.barge_rms, 0.08),
-                    max(self.settings.barge_min_ms, 350.0),
-                    1.0,
+                    max(self.settings.barge_rms * 0.7, 0.04),
+                    max(self.settings.barge_min_ms, 150.0),
+                    0.7,
                 )
             if mode == "normal":
                 return (
-                    max(self.settings.barge_rms, 0.12),
-                    max(self.settings.barge_min_ms, 500.0),
-                    1.2,
+                    max(self.settings.barge_rms, 0.06),
+                    max(self.settings.barge_min_ms, 220.0),
+                    0.9,
                 )
             return (
-                max(self.settings.barge_rms, 0.18),
-                max(self.settings.barge_min_ms, 700.0),
-                1.5,
+                max(self.settings.barge_rms, 0.10),
+                max(self.settings.barge_min_ms, 380.0),
+                1.1,
             )
         return self.settings.barge_rms, self.settings.barge_min_ms, ECHO_TAIL_S
 
@@ -3958,17 +4024,18 @@ class Session:
         playback_ms = (time.perf_counter() - self._speech_started_at) * 1000.0
         threshold, min_ms, _tail = self._barge_gates()
         # Adaptive echo-aware threshold: when open-mic barge is on, speech must beat speaker echo
-        if instant and not self.settings.wake_to_interrupt and self._echo_peak_rms > 0.0:
-            threshold = max(threshold, min(0.65, self._echo_peak_rms * 1.35))
-        accepted = (
+        if (
             instant
-            and should_interrupt(
-                rms=rms,
-                segment_ms=spoken_ms,
-                playback_ms=playback_ms,
-                threshold=threshold,
-                min_segment_ms=min_ms,
-            )
+            and not self.settings.wake_to_interrupt
+            and self._echo_peak_rms > 0.0
+        ):
+            threshold = max(threshold, min(0.14, self._echo_peak_rms * 1.05))
+        accepted = instant and should_interrupt(
+            rms=rms,
+            segment_ms=spoken_ms,
+            playback_ms=playback_ms,
+            threshold=threshold,
+            min_segment_ms=min_ms,
         )
         if not accepted:
             # Stop-word fast path: a deliberate stop word ("stop", "cancel", "quiet")
@@ -4066,11 +4133,16 @@ class Session:
         self._barge_burst_counted = True
 
     def interrupt(self) -> None:
-        """Barge-in: stop TTS playback and active Front LLM stream, drop stale audio, listen immediately."""
+        """Barge-in: stop filler/TTS playback and active Front LLM stream, drop stale audio, listen immediately."""
         with self.lock:
+            self._interrupt_seq += 1
             self.barge_ins += 1
-            if self._speaking:
-                self._speech_cut = True  # #41: the transcript will say it was cut off
+            self._think_speech_ms = 0.0
+            self._echo_peak_rms = 0.0
+            if self._speaking or self.status == "thinking":
+                self._speech_cut = True  # #41: mark turn as interrupted mid-reply
+        with contextlib.suppress(Exception):
+            self._stop_filler()
         if self._pump is not None:
             # M2.2: streamed speech is cut through the pump too, so nothing queued
             # keeps talking after the barge-in.
@@ -4089,7 +4161,8 @@ class Session:
             self._held_at = 0.0
             self._live_turn = None
             self._speaking = False
-            self.status = "listening"
+            self._thinking_since = 0.0
+            self.status = "listening" if self.mode != "off" else "idle"
 
     def _work_loop(self) -> None:
         """Serialises transcription and agent turns off the audio thread."""

@@ -476,7 +476,10 @@ class NeuralTts:
             producer.start()
             index = 0
             while not self._stop.is_set():
-                audio = rendered.get()
+                try:
+                    audio = rendered.get(timeout=0.05)
+                except queue.Empty:
+                    continue
                 if audio is None:
                     break
                 aec.feed_reference(audio[0], audio[1])
@@ -500,7 +503,7 @@ class NeuralTts:
         _bump_play_generation()
         worker = self._worker
         if worker and worker.is_alive():
-            worker.join(timeout=1.0)
+            worker.join(timeout=0.2)
         with self._lock:
             self._speaking = False
 
@@ -910,7 +913,7 @@ class CloudTts:
         _bump_play_generation()
         worker = self._worker
         if worker and worker.is_alive():
-            worker.join(timeout=1.0)
+            worker.join(timeout=0.2)
         with self._lock:
             self._speaking = False
 
