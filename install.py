@@ -65,7 +65,11 @@ def apt_install(pkgs: list[str]) -> bool:
 def _node_major() -> int:
     try:
         out = subprocess.run(
-            ["node", "--version"], capture_output=True, text=True, timeout=15, check=False
+            ["node", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
         )
         return int(out.stdout.strip().lstrip("v").split(".")[0])
     except (OSError, ValueError, subprocess.SubprocessError):
@@ -77,12 +81,17 @@ def ensure_node() -> bool:
         print("  Node.js >= 20 already present")
         return True
     if not IS_LINUX or not _has_sudo():
-        print("  install Node.js 20+ manually, then: npm install -g @earendil-works/pi-coding-agent")
+        print(
+            "  install Node.js 20+ manually, then: npm install -g @earendil-works/pi-coding-agent"
+        )
         return False
     print("  installing Node.js 20 (NodeSource) ...")
     setup = Path("/tmp/nodesource_setup.sh")
     if (
-        run(["curl", "-fsSL", "https://deb.nodesource.com/setup_20.x", "-o", str(setup)]) == 0
+        run(
+            ["curl", "-fsSL", "https://deb.nodesource.com/setup_20.x", "-o", str(setup)]
+        )
+        == 0
         and run(["sudo", "-E", "bash", str(setup)]) == 0
         and run(["sudo", "apt-get", "install", "-y", "nodejs"]) == 0
         and _node_major() >= 20
@@ -134,10 +143,14 @@ def patch_pi_config() -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Install SONJ4 on this computer")
-    ap.add_argument("--pi", action="store_true", help="Raspberry Pi: full one-command setup")
+    ap.add_argument(
+        "--pi", action="store_true", help="Raspberry Pi: full one-command setup"
+    )
     ap.add_argument("--no-models", action="store_true", help="skip model downloads")
     ap.add_argument("--skip-venv", action="store_true", help="use the current Python")
-    ap.add_argument("--python", default=sys.executable, help="Python used to create .venv")
+    ap.add_argument(
+        "--python", default=sys.executable, help="Python used to create .venv"
+    )
     ap.add_argument("--check", action="store_true", help="only run the doctor")
     args = ap.parse_args()
 
@@ -146,7 +159,9 @@ def main() -> int:
 
     print(f"SONJ4 installer - {sys.platform} - Python {sys.version.split()[0]}")
     if sys.version_info < (3, 10) or sys.version_info >= (3, 13):
-        print("warning: Python 3.10-3.12 is the supported range for sherpa-onnx wheels.")
+        print(
+            "warning: Python 3.10-3.12 is the supported range for sherpa-onnx wheels."
+        )
 
     # --- Pi / Linux system prerequisites (audio libs + Node + Pi CLI) ---
     node_ok = True
@@ -154,7 +169,15 @@ def main() -> int:
     if args.pi and IS_LINUX:
         print("\n[1/5] System audio libraries + tools (sudo) ...")
         apt_install(
-            ["libportaudio2", "libsndfile1", "python3-venv", "curl", "tar", "git", "ca-certificates"]
+            [
+                "libportaudio2",
+                "libsndfile1",
+                "python3-venv",
+                "curl",
+                "tar",
+                "git",
+                "ca-certificates",
+            ]
         )
         print("\n[2/5] Node.js + Pi CLI ...")
         node_ok = ensure_node()
@@ -180,20 +203,26 @@ def main() -> int:
         print("warning: pip upgrade failed; continuing")
     rc = run([py, "-m", "pip", "install", "-r", str(ROOT / "requirements.txt")])
     if rc != 0:
-        print("ERROR: core dependencies failed to install. Check your network / Python version.")
+        print(
+            "ERROR: core dependencies failed to install. Check your network / Python version."
+        )
         return rc
     extras = ["ddgs", "pywebview"]
     if IS_WIN:
         extras.append("pywin32")
     if run([py, "-m", "pip", "install", *extras]) != 0:
-        print("warning: optional extras failed; SONJ still runs with local neural voice + browser window.")
+        print(
+            "warning: optional extras failed; SONJ still runs with local neural voice + browser window."
+        )
 
     # --- Models ---
     print("\n[4/5] Offline speech models ...")
     if not args.no_models:
         profile = "pi" if args.pi else "laptop"
         if run([py, str(ROOT / "setup_models.py"), "--profile", profile]) != 0:
-            print("warning: some models did not download; rerun setup_models.py when online.")
+            print(
+                "warning: some models did not download; rerun setup_models.py when online."
+            )
     if args.pi:
         patch_pi_config()
 
@@ -205,7 +234,9 @@ def main() -> int:
     print("SONJ4 install finished.")
     if args.pi:
         print(f"  Node.js ready : {'yes' if node_ok else 'NO - install Node 20+'}")
-        print(f"  Pi CLI ready  : {'yes' if cli_ok else 'NO - npm install -g @earendil-works/pi-coding-agent'}")
+        print(
+            f"  Pi CLI ready  : {'yes' if cli_ok else 'NO - npm install -g @earendil-works/pi-coding-agent'}"
+        )
         print("\nOnly TWO steps left (the sign-in is interactive):")
         print("  1) pi            <- one-time sign-in to your model provider")
         print("  2) ./sonj4.sh    <- start SONJ4 (http://127.0.0.1:8766)")
