@@ -1,0 +1,17 @@
+{
+  "nova": {
+    "voice": "Neural: kokoro:af_heart",
+    "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+    "description": "default female persona - warm, direct"
+  },
+  "piattos": {
+    "voice": "Neural: kokoro:am_michael",
+    "model": "nvidia/nemotron-3.5-lightning:free",
+    "description": "male persona on call - a different mind, not just a voice"
+  },
+  "scout": {
+    "voice": "Neural: kokoro:af_bella",
+    "model": "nvidia/nemotron-3.5-super-vl:free",
+    "description": "example custom persona with its own model - edit or delete me"
+  }
+}

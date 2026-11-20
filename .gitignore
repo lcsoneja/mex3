@@ -1,0 +1,30 @@
+# Secrets - never commit or ship these
+*.key
+openrouter.key
+elevenlabs.key
+.env
+.env.*
+
+# Runtime output / sessions / logs
+out/
+*.log
+
+# Local environments and caches
+.venv/
+venv/
+__pycache__/
+*.pyc
+.ruff_cache/
+.pytest_cache/
+.pi/fabric/
+
+# Build artifacts
+dist/
+*.zip
+
+# Large model weights (downloaded by setup_models.py; keep out of git)
+models/
+
+# Backup configs
+*.bak
+config.json.bak

@@ -1,0 +1,9 @@
+# Lint config for the app itself.
+#
+# Without this file ruff guesses which imports are first-party from the working
+# directory, so the same file is "sorted" when linted from me3_laptop/ and
+# "un-sorted" when linted from the parent. Pinning src removes that ambiguity.
+# models/ is vendored model data (including generated dictionaries), not our code.
+
+src = ["."]
+exclude = ["models", "out", "__pycache__"]

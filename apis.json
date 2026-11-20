@@ -1,0 +1,12 @@
+{
+  "wiki_search": {
+    "url": "https://en.wikipedia.org/w/api.php",
+    "description": "Wikipedia search (action=query&list=search needs params)",
+    "params": "action=query, list=search, srsearch=<term>, format=json"
+  },
+  "open_meteo": {
+    "url": "https://api.open-meteo.com/v1/forecast",
+    "description": "Current weather by lat/long",
+    "params": "latitude, longitude, current_weather=true"
+  }
+}

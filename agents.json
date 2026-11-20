@@ -1,0 +1,107 @@
+{
+  "front": {
+    "model": "github-copilot/gpt-5.4-nano",
+    "fallbacks": [
+      "cohere/north-mini-code:free",
+      "nvidia/nemotron-3.5-super-vl:free",
+      "github-copilot/gpt-6-luna"
+    ],
+    "thinking": "off",
+    "role_kind": "coordinator",
+    "description": "Owner's voice companion and coordinator (<2s turns + delegation)"
+  },
+  "doctor": {
+    "model": "github-copilot/gpt-6-luna",
+    "fallbacks": [
+      "deepseek/deepseek-v4.1-flash",
+      "cohere/north-mini-code:free"
+    ],
+    "thinking": "medium",
+    "role_kind": "diagnostics",
+    "description": "App doctor: investigates issues, logs, internals, settings, and catalogue repairs"
+  },
+  "classifier": {
+    "model": "deterministic/decision-classifier-v1",
+    "fallbacks": [],
+    "thinking": "off",
+    "kind": "classifier",
+    "deadline_ms": 90,
+    "front_bias": 0.1,
+    "choices": [
+      "front",
+      "back",
+      "doctor"
+    ],
+    "description": "Non-LLM Decision Classifier (<100ms, +10% Front bias) between user and Front"
+  },
+  "back-1": {
+    "model": "github-copilot/gpt-6-luna",
+    "fallbacks": [
+      "deepseek/deepseek-v4.1-flash",
+      "cohere/north-mini-code:free",
+      "nvidia/nemotron-3.5-super-vl:free"
+    ],
+    "thinking": "medium",
+    "max_parallel": 5,
+    "max_steps": 12,
+    "tools": "pi, device, files, mcp",
+    "role_kind": "worker",
+    "description": "Always-warm generalist worker #1 (build, research, critic/verify, summarize, automate)"
+  },
+  "back-2": {
+    "model": "github-copilot/gpt-6-luna",
+    "fallbacks": [
+      "deepseek/deepseek-v4.1-flash",
+      "cohere/north-mini-code:free",
+      "nvidia/nemotron-3.5-super-vl:free"
+    ],
+    "thinking": "medium",
+    "max_parallel": 5,
+    "max_steps": 12,
+    "tools": "pi, device, files, mcp",
+    "role_kind": "worker",
+    "description": "Always-warm generalist worker #2 (build, research, critic/verify, summarize, automate)"
+  },
+  "back-3": {
+    "model": "github-copilot/gpt-6-luna",
+    "fallbacks": [
+      "deepseek/deepseek-v4.1-flash",
+      "cohere/north-mini-code:free",
+      "nvidia/nemotron-3.5-super-vl:free"
+    ],
+    "thinking": "medium",
+    "max_parallel": 5,
+    "max_steps": 12,
+    "tools": "pi, device, files, mcp",
+    "role_kind": "worker",
+    "description": "Always-warm generalist worker #3 (build, research, critic/verify, summarize, automate)"
+  },
+  "back-4": {
+    "model": "github-copilot/gpt-6-luna",
+    "fallbacks": [
+      "deepseek/deepseek-v4.1-flash",
+      "cohere/north-mini-code:free",
+      "nvidia/nemotron-3.5-super-vl:free"
+    ],
+    "thinking": "medium",
+    "max_parallel": 5,
+    "max_steps": 12,
+    "tools": "pi, device, files, mcp",
+    "role_kind": "worker",
+    "description": "Always-warm generalist worker #4 (build, research, critic/verify, summarize, automate)"
+  },
+  "back-5": {
+    "model": "github-copilot/gpt-6-luna",
+    "fallbacks": [
+      "deepseek/deepseek-v4.1-flash",
+      "cohere/north-mini-code:free",
+      "nvidia/nemotron-3.5-super-vl:free"
+    ],
+    "thinking": "medium",
+    "max_parallel": 5,
+    "max_steps": 12,
+    "tools": "pi, device, files, mcp",
+    "role_kind": "worker",
+    "description": "Always-warm generalist worker #5 (build, research, critic/verify, summarize, automate)"
+  }
+}

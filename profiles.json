@@ -1,0 +1,20 @@
+{
+  "laptop": {
+    "note": "development profile: cloud front agent, cloud back agent, local speech",
+    "front": "nvidia/nemotron-3.5-lightning:free",
+    "back": "deepseek/deepseek-v4.1-flash",
+    "router": "qwen2.5-coder:7b",
+    "tts_voice": "Neural: en_US-lessac-high",
+    "asr_backend": "whisper"
+  },
+  "pi": {
+    "note": "8 GB Pi 5: speech stays local, chat stays in the cloud, tiny local fallback",
+    "front": "nvidia/nemotron-3.5-lightning:free",
+    "back": "deepseek/deepseek-v4.1-flash",
+    "router": "gemma3:270m",
+    "front_fallback_offline": "gemma3:270m",
+    "tts_voice": "piper:en_US-lessac-medium",
+    "asr_backend": "whisper",
+    "max_reply_tokens": 40
+  }
+}

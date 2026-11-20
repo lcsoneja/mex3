@@ -1,0 +1,1 @@
+Write a professional LinkedIn bio (3 short paragraphs, no emoji): ask the user for role, years, and one achievement if missing, then produce it.

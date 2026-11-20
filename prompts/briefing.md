@@ -1,0 +1,1 @@
+Give a spoken briefing: time first (get_time), reminders (list_reminders), then one useful follow-up question.

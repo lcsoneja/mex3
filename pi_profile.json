@@ -1,0 +1,29 @@
+{
+  "profile": "pi",
+  "target": "Raspberry Pi 4 GB (SONJ P2)",
+  "tts": {
+    "backend": "piper",
+    "family": "VITS",
+    "voice": "en_US-lessac-high",
+    "model_path": "models/vits-piper-en_US-lessac-high/en_US-lessac-high.onnx"
+  },
+  "asr": {
+    "backend": "moonshine",
+    "model": "base-en",
+    "quantization": "int8",
+    "model_path": "models/sherpa-onnx-moonshine-base-en-int8",
+    "fallback": {
+      "backend": "whisper",
+      "model": "tiny.en",
+      "quantization": "int8",
+      "model_path": "models/sherpa-onnx-whisper-tiny.en"
+    }
+  },
+  "vad_model": "models/silero_vad.onnx",
+  "idle_unload_s": 60,
+  "browser_enabled": false,
+  "memory_budget_gb": 1.2,
+  "memory_budget_mb": 1200,
+  "comment": "The laptop stays on its existing Kokoro voices; this Pi profile selects Piper VITS.",
+  "server_integration_note": "Applying this overlay inside server.py load_settings() is a planned change owned by the lead. SONJ currently hands SONJ_PROFILE=pi to the child process; this profile documents the intended settings."
+}

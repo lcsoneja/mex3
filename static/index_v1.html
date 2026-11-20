@@ -1,0 +1,688 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ME3 · Voice Agent Console</title>
+<style>
+:root{
+  --font: ui-sans-serif, system-ui, "Segoe UI Variable", "Segoe UI", Inter, Roboto, sans-serif;
+  --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --r-sm:8px; --r-md:12px; --r-lg:16px; --r-full:999px;
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px;
+  --t-xs:11px; --t-sm:12px; --t-md:13px; --t-lg:15px; --t-xl:20px; --t-2xl:28px;
+  --fast:120ms; --med:180ms;
+}
+html[data-theme="dark"]{
+  --bg:#0a0c11; --bg-2:#0e1117; --panel:#12161f; --panel-2:#171c27; --panel-3:#1d2431;
+  --line:#232b3a; --line-2:#2d3648; --text:#e9edf5; --text-2:#aab4c8; --muted:#7c8699;
+  --accent:#5b9dff; --accent-soft:#12233c; --accent-line:#274b7d;
+  --ok:#42d392; --ok-soft:#0f2a20; --warn:#ffc266; --warn-soft:#2b2110; --err:#ff7a7a; --err-soft:#2c1414;
+  --user:#182338; --bot:#141b24; --task:#1a2333;
+  --shadow:0 1px 0 rgba(255,255,255,.03), 0 10px 30px rgba(0,0,0,.35);
+}
+html[data-theme="light"]{
+  --bg:#f6f7fb; --bg-2:#eef1f7; --panel:#fff; --panel-2:#f7f9fc; --panel-3:#eef2f8;
+  --line:#e3e8f0; --line-2:#d5dce8; --text:#0f1729; --text-2:#42506b; --muted:#6b7893;
+  --accent:#2563eb; --accent-soft:#e8efff; --accent-line:#bcd2ff;
+  --ok:#0f9d63; --ok-soft:#e6f7ef; --warn:#b4720b; --warn-soft:#fdf3e1; --err:#c02b2b; --err-soft:#fdeaea;
+  --user:#eaf1ff; --bot:#f4f7fc; --task:#f0f4fb;
+  --shadow:0 1px 2px rgba(16,24,40,.06), 0 12px 28px rgba(16,24,40,.08);
+}
+*{box-sizing:border-box} html,body{height:100%}
+[hidden]{display:none !important}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font);font-size:var(--t-md);
+  display:grid;grid-template-rows:56px 1fr 34px;height:100vh;overflow:hidden;-webkit-font-smoothing:antialiased}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.topbar{display:flex;align-items:center;gap:var(--s4);padding:0 var(--s5);background:linear-gradient(180deg,var(--panel),var(--bg-2));border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:10px;font-weight:650}
+.dot{width:9px;height:9px;border-radius:var(--r-full);background:var(--muted)}
+.dot.live{background:var(--ok);animation:pulse 1.6s infinite}
+.dot.speak{background:var(--accent);animation:pulse 1.1s infinite}
+.dot.think{background:var(--warn);animation:pulse 1.4s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:var(--r-full);background:var(--panel-2);border:1px solid var(--line);color:var(--text-2);font-size:var(--t-sm)}
+.pill.ok{color:var(--ok);background:var(--ok-soft);border-color:var(--accent-line)}
+.pill.warn{color:var(--warn);background:var(--warn-soft)}
+.spacer{flex:1}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:10px;background:var(--panel-2);border:1px solid var(--line);cursor:pointer;transition:background var(--fast),transform var(--fast)}
+.btn:hover{background:var(--panel-3)} .btn:active{transform:translateY(1px)}
+.btn.primary{background:var(--accent);border-color:transparent;color:#fff;font-weight:600}
+.btn.ghost{background:transparent} .btn.danger{color:var(--err)}
+.shell{display:grid;grid-template-columns:76px 1fr;min-height:0}
+.rail{display:flex;flex-direction:column;gap:var(--s1);padding:var(--s3) var(--s2);background:var(--bg-2);border-right:1px solid var(--line);align-items:center}
+.rail-item{width:60px;padding:9px 0;border-radius:var(--r-md);background:transparent;border:1px solid transparent;color:var(--muted);cursor:pointer;display:grid;gap:4px;justify-items:center;font-size:10px;transition:background var(--fast),color var(--fast)}
+.rail-item .ico{font-size:17px;line-height:1}
+.rail-item:hover{background:var(--panel);color:var(--text-2)}
+.rail-item.active{background:var(--accent-soft);color:var(--accent);border-color:var(--accent-line)}
+main{min-width:0;min-height:0;display:grid;grid-template-rows:auto 1fr;gap:var(--s5);padding:var(--s5)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:var(--s3)}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-md);padding:var(--s3) var(--s4);box-shadow:var(--shadow);transition:transform var(--fast)}
+.kpi:hover{transform:translateY(-1px)}
+.kpi .label{display:block;font-size:var(--t-xs);text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.kpi .value{display:block;font-size:var(--t-2xl);font-weight:650;line-height:1.15}
+.kpi .value.sm{font-size:var(--t-xl)}
+.kpi .sub{display:block;font-size:var(--t-xs);color:var(--muted)}
+.kpi.good .value{color:var(--ok)} .kpi.warn .value{color:var(--warn)}
+.workspace{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:var(--s5);min-height:0}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--shadow);display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.panel-head{display:flex;align-items:center;gap:var(--s3);padding:var(--s3) var(--s4);border-bottom:1px solid var(--line)}
+.panel-head h2{margin:0;font-size:var(--t-lg);font-weight:620}
+.panel-body{padding:var(--s4);overflow:auto;min-height:0}
+.transcript{flex:1;padding:var(--s4);overflow:auto;display:flex;flex-direction:column;gap:var(--s3);min-height:0}
+.turn{display:grid;grid-template-columns:34px 1fr;gap:var(--s3);animation:rise var(--med) ease-out}
+@keyframes rise{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.avatar{width:34px;height:34px;border-radius:var(--r-full);display:grid;place-items:center;font-size:14px;background:var(--panel-2);border:1px solid var(--line)}
+.turn.user .avatar{background:var(--user)} .turn.task .avatar{background:var(--task)}
+/* Two-sided message pane: the assistant speaks on the left, you on the right, the way a
+   chat reads. Source order is deliberately unchanged - grid `order` moves the avatar - so
+   this needs no DOM or JS change and the never-innerHTML guarantee is untouched. */
+.turn.user{grid-template-columns:1fr 34px}
+.turn.user .avatar{order:2}
+.turn.user .bubble{border-color:var(--user)}
+.turn.user .bubble .who,.turn.user .bubble p{text-align:right}
+.turn.user .chips{justify-content:flex-end;display:flex}
+.bubble{background:var(--bot);border:1px solid var(--line);border-radius:var(--r-md);padding:10px 13px;max-width:70ch}
+.turn.user .bubble{background:var(--user)} .turn.task .bubble{background:var(--task)}
+.bubble .who{display:block;font-size:var(--t-xs);color:var(--muted);margin-bottom:3px}
+.bubble p{margin:0;white-space:pre-wrap}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.chip{font-size:var(--t-xs);padding:2px 8px;border-radius:var(--r-full);background:var(--panel-2);border:1px solid var(--line);color:var(--text-2);font-family:var(--mono)}
+.chip.tool{border-color:var(--accent-line);color:var(--accent);background:var(--accent-soft)}
+.chip.ok{color:var(--ok)}
+.err-banner{margin:0 var(--s4) var(--s3);padding:8px 12px;border-radius:10px;background:var(--err-soft);border:1px solid var(--line);color:var(--err);font-size:var(--t-sm)}
+.composer{display:flex;gap:var(--s2);padding:var(--s3) var(--s4);border-top:1px solid var(--line);background:var(--panel-2)}
+.composer input{flex:1;padding:10px 13px;border-radius:10px;background:var(--bg-2);border:1px solid var(--line)}
+.tabs{display:flex;gap:var(--s1);padding:8px;border-bottom:1px solid var(--line);background:var(--panel-2)}
+.tab{padding:6px 11px;border-radius:var(--r-full);background:transparent;border:1px solid transparent;color:var(--muted);cursor:pointer}
+.tab.active{background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent)}
+.tabpanel{display:none;flex-direction:column;gap:var(--s3);padding:var(--s4);overflow:auto;min-height:0}
+.tabpanel.active{display:flex}
+.card{background:var(--panel-2);border:1px solid var(--line);border-radius:var(--r-md);padding:10px 12px}
+.card .title{display:flex;justify-content:space-between;gap:var(--s2);font-weight:600;font-size:var(--t-sm)}
+.card .meta{font-size:var(--t-xs);color:var(--muted)}
+.step{display:flex;justify-content:space-between;gap:var(--s2);font-size:var(--t-xs);padding:3px 0 3px 12px;color:var(--text-2);border-left:1px dashed var(--line-2);margin-left:6px}
+.state{font-family:var(--mono);font-size:var(--t-xs);padding:1px 7px;border-radius:var(--r-full);border:1px solid var(--line)}
+.state.running{color:var(--accent);border-color:var(--accent-line);background:var(--accent-soft)}
+.state.done{color:var(--ok);background:var(--ok-soft)}
+.state.blocked{color:var(--err);background:var(--err-soft)}
+table.rows{width:100%;border-collapse:collapse;font-size:var(--t-sm)}
+table.rows th{text-align:left;color:var(--muted);font-weight:500;font-size:var(--t-xs);text-transform:uppercase;letter-spacing:.06em;padding:4px 6px}
+table.rows td{padding:6px;border-top:1px solid var(--line);vertical-align:top}
+table.rows tr:hover td{background:var(--panel-3)}
+.empty{color:var(--muted);font-size:var(--t-sm);padding:var(--s4);text-align:center;line-height:1.6}
+.linkish{background:none;border:none;color:var(--accent);cursor:pointer;padding:0}
+.statusbar{display:flex;align-items:center;gap:var(--s4);padding:0 var(--s5);border-top:1px solid var(--line);background:var(--bg-2);color:var(--muted);font-size:var(--t-xs)}
+.meter{width:120px;height:6px;border-radius:var(--r-full);background:var(--panel-3);overflow:hidden}
+.meter>i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--ok));transition:width 90ms linear}
+#voice-wave{height:26px;border-radius:8px;background:var(--panel-2);border:1px solid var(--line)}
+.thought{display:flex;gap:10px;padding:5px 0;border-bottom:1px solid var(--line);font-size:12.5px;line-height:1.45}
+.thought:last-child{border-bottom:none}
+.thought .t{color:var(--text-dim);font-variant-numeric:tabular-nums;flex:0 0 88px}
+.thought .dot2{flex:0 0 8px;height:8px;border-radius:50%;margin-top:5px;background:var(--text-dim)}
+.thought.you .dot2{background:var(--accent)} .thought.llm .dot2{background:var(--ok)}
+.thought.tts .dot2{background:var(--warn,#d97706)} .thought.tool .dot2{background:#8b5cf6}
+.thought.filler .dot2{background:#06b6d4} .thought.echo .dot2{background:var(--ok)}
+.thought.error .dot2{background:var(--bad,#ef4444)}
+@media (max-width:1100px){ .workspace{grid-template-columns:1fr} .inspector{display:none} }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><span class="dot" id="speaker-dot"></span> ME3 Voice Agent Console</div>
+  <span class="pill" id="pill-speaker">idle</span>
+  <canvas id="voice-wave" width="168" height="26" title="who is speaking, live"></canvas>
+  <span class="pill" id="pill-model">—</span>
+  <span class="pill" id="pill-mic">mic off</span>
+  <span class="spacer"></span>
+  <button class="btn" id="btn-listen">Listen</button>
+  <button class="btn" id="btn-stop">Stop</button>
+  <button class="btn danger" id="btn-barge">Interrupt</button>
+  <button class="btn ghost" id="btn-theme" title="toggle light/dark">◐</button>
+</header>
+<div class="shell">
+  <nav class="rail" aria-label="Sections">
+    <button class="rail-item active" data-view="chat"><span class="ico">◧</span>Chat</button>
+    <button class="rail-item" data-view="thinking"><span class="ico">⊙</span>Thinking</button>
+    <button class="rail-item" data-view="sessions"><span class="ico">◰</span>Sessions</button>
+    <button class="rail-item" data-view="files"><span class="ico">▤</span>Files</button>
+    <button class="rail-item" data-view="agents"><span class="ico">◍</span>Agents</button>
+    <button class="rail-item" data-view="settings"><span class="ico">⚙</span>Settings</button>
+  </nav>
+  <main>
+    <section class="kpis" aria-label="Key numbers">
+      <div class="kpi" id="kpi-first"><span class="label">First audio</span><span class="value num">—</span><span class="sub">time to the first sound</span></div>
+      <div class="kpi" id="kpi-llm"><span class="label">LLM p50</span><span class="value num">—</span><span class="sub">inside a turn</span></div>
+      <div class="kpi" id="kpi-tasks"><span class="label">Subagents</span><span class="value sm num">—</span><span class="sub">running / total</span></div>
+      <div class="kpi" id="kpi-spend"><span class="label">Spend</span><span class="value sm num">$0.0000</span><span class="sub">this session</span></div>
+      <div class="kpi" id="kpi-turns"><span class="label">Turns</span><span class="value sm num">0</span><span class="sub">this conversation</span></div>
+    </section>
+    <section class="workspace" id="view-chat">
+      <div class="panel">
+        <div class="panel-head"><h2>Conversation</h2><span class="pill" id="chat-sub">session</span><span class="spacer"></span><span class="pill" id="chat-status">idle</span></div>
+        <div class="err-banner" id="error-banner" hidden></div>
+        <div class="transcript" id="transcript" aria-live="polite"></div>
+        <form class="composer" id="composer">
+          <input id="input" placeholder="Ask something —  /  to focus · Ctrl+Enter sends" autocomplete="off">
+          <button class="btn" type="button" id="btn-mic">Mic</button>
+          <button class="btn primary" type="submit">Send</button>
+        </form>
+      </div>
+      <aside class="panel inspector">
+        <div class="tabs" role="tablist">
+          <button class="tab active" data-tab="workflow">Workflow</button>
+          <button class="tab" data-tab="subagents">Subagents</button>
+          <button class="tab" data-tab="mindmap">Mind map</button>
+        </div>
+        <div class="tabpanel active" id="tab-workflow"></div>
+        <div class="tabpanel" id="tab-subagents"></div>
+        <div class="tabpanel" id="tab-mindmap"></div>
+      </aside>
+    </section>
+    <section class="panel" id="view-thinking" hidden>
+      <div class="panel-head"><h2>Thinking</h2><span class="pill" id="thinking-sub">the engine's steps, in order</span><span class="spacer"></span><span class="pill" id="thinking-count">0 steps</span></div>
+      <div class="panel-body" id="thinking-body"></div>
+    </section>
+    <section class="panel" id="view-sessions" hidden>
+      <div class="panel-head"><h2>Conversation history</h2><span class="pill" id="sessions-sub"></span></div>
+      <div class="panel-body" id="sessions-body"></div>
+    </section>
+    <section class="panel" id="view-files" hidden>
+      <div class="panel-head"><h2>Folders the agents can read</h2><span class="pill" id="files-sub"></span><span class="spacer"></span>
+        <input id="folder-input" placeholder="paste a folder path to grant read access" style="width:300px;padding:6px 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg-2)">
+        <button class="btn" id="btn-grant">Grant</button>
+      </div>
+      <div class="panel-body" id="files-body"></div>
+    </section>
+    <section class="panel" id="view-settings" hidden>
+      <div class="panel-head"><h2>Voice options</h2><span class="pill">persona voices &amp; stop words</span><span class="spacer"></span><button class="btn primary" id="btn-save-settings">Save</button></div>
+      <div class="panel-body" id="settings-body"></div>
+    </section>
+    <section class="panel" id="view-agents" hidden>
+      <div class="panel-head"><h2>Agent roster</h2><span class="pill">routing is data · agents.json</span><span class="spacer"></span><button class="btn primary" id="btn-save-agents">Save roster</button></div>
+      <div class="panel-body" id="agents-body"></div>
+    </section>
+  </main>
+</div>
+<footer class="statusbar">
+  <span class="meter" title="microphone level"><i id="level-fill"></i></span>
+  <span id="status-text">connecting…</span>
+  <span class="spacer"></span>
+  <span id="legend" style="display:flex;gap:10px"></span>
+  <span id="session-id" class="num"></span>
+</footer>
+<script>
+'use strict';
+const $ = (id) => document.getElementById(id);
+const SVG = 'http://www.w3.org/2000/svg';
+
+/* DOM helpers: every dynamic value goes through textContent, never innerHTML, so model and
+   user text can never be parsed as markup. */
+function el(tag, attrs, ...kids){
+  const node = document.createElement(tag);
+  if (attrs) for (const [k, v] of Object.entries(attrs)){
+    if (k === 'class') node.className = v;
+    else if (k === 'text') node.textContent = v;
+    else if (k.startsWith('on')) node.addEventListener(k.slice(2).toLowerCase(), v);
+    else if (v !== null && v !== undefined) node.setAttribute(k, v);
+  }
+  add(node, kids);
+  return node;
+}
+function svgEl(tag, attrs, ...kids){
+  const node = document.createElementNS(SVG, tag);
+  if (attrs) for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+  add(node, kids);
+  return node;
+}
+function add(parent, kids){
+  // NodeList has no .flat(); Array.from first so passing childNodes is safe.
+  const list = Array.isArray(kids) ? kids.flat(Infinity) : Array.from(kids || []);
+  for (const kid of list){
+    if (kid === null || kid === undefined || kid === false) continue;
+    parent.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
+  }
+}
+const setKids = (parent, ...kids) => { parent.replaceChildren(); add(parent, kids); };
+const ms = (v) => (v === null || v === undefined || Number.isNaN(Number(v))) ? '—' : Math.round(Number(v)) + ' ms';
+
+const api = async (path, body) => {
+  const opts = body ? {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)} : {};
+  const r = await fetch(path, opts);
+  const type = r.headers.get('content-type') || '';
+  if (!type.includes('json')) return await r.text();
+  try { return await r.json(); } catch (err) { return {ok:false, error:'bad json from ' + path}; }
+};
+
+let state = {}, rendered = new Set(), mapData = null, agentsDraft = null, pinned = true;
+
+function speakerWord(s){
+  if (s.status === 'speaking') return 'assistant speaking';
+  if (s.recording) return 'you (mic)';
+  if (s.status === 'thinking') return 'thinking';
+  if (s.mode && s.mode !== 'off') return 'listening';
+  return 'idle';
+}
+function speakerTone(word){
+  if (word === 'thinking') return ' warn';
+  if (word.includes('speaking')) return ' ok';
+  if (word.includes('mic') || word === 'listening') return ' live';
+  return '';
+}
+function renderTop(s){
+  const word = speakerWord(s);
+  const pill = $('pill-speaker');
+  pill.textContent = word;
+  const tone = speakerTone(word);
+  pill.className = 'pill' + tone;
+  $('speaker-dot').className = 'dot' + tone;
+  $('pill-model').textContent = ((s.settings && s.settings.provider) || '') + '/' + ((s.settings && s.settings.model) || '—');
+  $('pill-mic').textContent = 'mic ' + (s.mode || 'off');
+  $('chat-status').textContent = s.status || 'idle';
+  const sessionId = String(s.session_dir || '').split(/[\\/]/).pop() || 'session';
+  $('chat-sub').textContent = sessionId;
+  $('session-id').textContent = sessionId;
+  $('level-fill').style.width = Math.max(0, Math.min(100, (s.level || 0) * 500)) + '%';
+  $('status-text').textContent = s.error ? ('error: ' + String(s.error).slice(0, 90)) : (s.status || 'idle');
+  const banner = $('error-banner');
+  banner.hidden = !s.error;
+  if (s.error) banner.textContent = String(s.error).slice(0, 240);
+  setKids($('legend'), [
+    ['barge-ins', s.barge_ins], ['echo drops', s.echo_drops],
+    ['ignored', s.ignored_while_speaking], ['models in RAM', (s.loaded_models || []).length],
+  ].map(([k, v]) => el('span', {class:'chip', text:`${k}: ${v === undefined ? 0 : v}`})));
+}
+function setKpi(id, value, sub, cls){
+  const node = $(id);
+  node.querySelector('.value').textContent = value;
+  if (sub) node.querySelector('.sub').textContent = sub;
+  node.className = 'kpi ' + (cls || '');
+}
+function renderKpis(s){
+  const turns = s.turns || [];
+  const firsts = turns.map(t => (t.timings && t.timings.filler_ms) || 0).filter(v => v > 0);
+  const lastFirst = firsts.at(-1) || 0;
+  setKpi('kpi-first', lastFirst ? ms(lastFirst) : '—',
+    firsts.length ? 'p50 ' + ms(firsts.reduce((a, b) => a + b, 0) / firsts.length) : 'no acknowledgement yet',
+    lastFirst && lastFirst < 400 ? 'good' : (lastFirst ? 'warn' : ''));
+  const llms = turns.map(t => (t.timings && t.timings.llm_ms) || 0).filter(v => v > 0).sort((a, b) => a - b);
+  const mid = llms.length ? llms[Math.floor(llms.length / 2)] : 0;
+  setKpi('kpi-llm', mid ? ms(mid) : '—', llms.length + ' measured', mid && mid < 1500 ? 'good' : (mid ? 'warn' : ''));
+  const tasks = s.tasks || [];
+  setKpi('kpi-tasks', tasks.filter(t => t.state === 'running').length + ' / ' + tasks.length, tasks.length ? 'background work' : 'idle');
+  setKpi('kpi-spend', '$' + Number(s.spend_usd || 0).toFixed(4), (s.spend_tokens || 0) + ' tokens');
+  setKpi('kpi-turns', String(turns.length), 'this conversation');
+}
+function turnNode(kind, who, text, chips){
+  const inner = el('div', null,
+    el('div', {class:'bubble'},
+      el('span', {class:'who', text:who}),
+      el('p', {text:text})));
+  if (chips && chips.length) inner.append(el('div', {class:'chips'}, chips));
+  const face = kind === 'task' ? '⚙' : kind === 'user' ? '🙂' : '🔊';
+  return el('div', {class:'turn ' + kind}, el('div', {class:'avatar', text:face}), inner);
+}
+function whoSaid(t){
+  if (t.source === 'mic') return 'you (mic)';
+  if (t.source === 'text') return 'you';
+  if (t.source === 'task') return 'subagent';
+  if (t.source === 'panel') return 'you (panel)';
+  return String(t.source || 'you');
+}
+function renderTranscript(s){
+  const box = $('transcript');
+  for (const t of (s.turns || [])){
+    if (rendered.has(t.id)) continue;
+    rendered.add(t.id);
+    const stamp = t.ts ? ' · ' + t.ts : '';
+    // A turn carries both sides: show what was asked, then what was answered, each labelled.
+    const asked = t.user_text || '';
+    if (asked){
+      const kind = t.source === 'task' ? 'task' : 'user';
+      box.append(turnNode(kind, whoSaid(t) + stamp, asked, null));
+    }
+    const said = t.assistant_text || '';
+    if (said){
+      const chips = [];
+      for (const tool of (t.tools || [])){
+        const name = typeof tool === 'string' ? tool : (tool.name || 'tool');
+        const ok = typeof tool === 'object' && 'ok' in tool ? tool.ok : true;
+        chips.push(el('span', {class:'chip tool', text:name + (ok ? '' : ' ✗')}));
+      }
+      const timings = t.timings || {};
+      if (timings.total_ms) chips.push(el('span', {class:'chip', text:'total ' + Math.round(timings.total_ms) + ' ms'}));
+      if (timings.llm_ms) chips.push(el('span', {class:'chip', text:'llm ' + Math.round(timings.llm_ms) + ' ms'}));
+      if (timings.filler_ms) chips.push(el('span', {class:'chip ok', text:'first ' + Math.round(timings.filler_ms) + ' ms'}));
+      if (t.model) chips.push(el('span', {class:'chip', text:t.model}));
+      const who = t.source === 'task' ? 'subagent' + stamp : 'assistant' + stamp;
+      box.append(turnNode(t.source === 'task' ? 'task' : 'assistant', who, said, chips));
+    }
+  }
+  if (pinned) box.scrollTop = box.scrollHeight;
+}
+function renderInspector(s){
+  const tasks = s.tasks || [];
+  const steps = {};
+  for (const node of ((s.workflow && s.workflow.nodes) || [])){
+    if (node.kind === 'step'){ const parent = String(node.id).split('.')[0]; (steps[parent] = steps[parent] || []).push(node); }
+  }
+  setKids($('tab-workflow'), tasks.length ? tasks.map(t =>
+    el('div', {class:'card'},
+      el('div', {class:'title'}, el('span', {text:t.id + ' · ' + String(t.brief || '').slice(0, 40)}), el('span', {class:'state ' + t.state, text:t.state})),
+      el('div', {class:'meta', text:(t.model || '') + ' · ' + Math.round(t.seconds || 0) + 's · ' + (t.steps || 0) + ' steps'}),
+      (steps[t.id] || []).map(st => el('div', {class:'step'},
+        el('span', {text:String(st.label || '').slice(0, 34)}),
+        el('span', {class:'num', text:Math.round((st.seconds || 0) * 1000) + ' ms'})))))
+    : [el('div', {class:'empty', text:'No background work yet. Ask for something that takes a moment and it will appear here while the chat carries on.'})]);
+
+  const rows = tasks.map(t => el('tr', null,
+    el('td', null, el('div', {text:t.id}), el('div', {class:'meta', text:String(t.brief || '').slice(0, 44)})),
+    el('td', null, el('span', {class:'state ' + t.state, text:t.state})),
+    el('td', {class:'num', text:String(t.model || '').slice(0, 20)}),
+    el('td', {class:'num', text:String(t.steps || 0)}),
+    el('td', {class:'num', text:String(Math.round(t.seconds || 0))}),
+    el('td', null, (t.state === 'running' || t.state === 'queued')
+      ? el('button', {class:'linkish', text:'cancel', onclick:() => api('/api/task/cancel', {id:t.id})}) : null)));
+  setKids($('tab-subagents'), tasks.length ?
+    el('table', {class:'rows'}, el('tr', null,
+      el('th', {text:'task'}), el('th', {text:'state'}), el('th', {text:'model'}),
+      el('th', {text:'steps'}), el('th', {text:'s'}), el('th', {text:''})), rows)
+    : [el('div', {class:'empty', text:'No subagents running.'})]);
+  setKids($('tab-mindmap'), mapData ? [mindMap(mapData)] : [el('div', {class:'empty', text:'Ask something and its shape will appear here.'})]);
+}
+function mindMap(m){
+  const branches = m.branches || [];
+  const leaves = branches.reduce((n, b) => n + ((b.children || []).length), 0);
+  const height = 90 + branches.length * 40 + leaves * 22;
+  const out = svgEl('svg', {viewBox:'0 0 340 ' + height, width:'100%', height:String(height), role:'img', 'aria-label':'request mind map'});
+  add(out, [svgEl('rect', {x:10, y:12, width:320, height:46, rx:12, fill:'var(--accent-soft)', stroke:'var(--accent-line)'}),
+    svgEl('text', {x:170, y:39, 'text-anchor':'middle', 'font-size':11, fill:'var(--accent)'}, String(m.root || '').slice(0, 46))]);
+  let y = 70;
+  for (const b of branches){
+    add(out, [svgEl('line', {x1:170, y1:58, x2:170, y2:y, stroke:'var(--line-2)'}),
+      svgEl('rect', {x:20, y:y, width:300, height:26, rx:9, fill:'var(--panel-2)', stroke:'var(--line)'}),
+      svgEl('text', {x:32, y:y + 17, 'font-size':11, fill:'var(--text-2)'}, String(b.label || '').slice(0, 42))]);
+    y += 32;
+    for (const c of (b.children || [])){
+      add(out, [svgEl('line', {x1:40, y1:y - 6, x2:52, y2:y + 7, stroke:'var(--line-2)'}),
+        svgEl('rect', {x:52, y:y, width:268, height:20, rx:7, fill:'var(--panel)', stroke:'var(--line)'}),
+        svgEl('text', {x:62, y:y + 14, 'font-size':10, fill:'var(--muted)'}, String(c.label || '').slice(0, 40) + (c.detail ? ' · ' + c.detail : ''))]);
+      y += 24;
+    }
+    y += 10;
+  }
+  return out;
+}
+
+function sessionRow(s){
+  return el('tr', null,
+    el('td', null,
+      el('span', {text:String(s.title || '').slice(0, 60)}),
+      s.current ? el('span', {class:'chip ok', text:' current'}) : null),
+    el('td', {class:'num', text:String(s.turns)}),
+    el('td', {class:'num', text:s.id}),
+    el('td', null, el('button', {class:'linkish', text:'open', onclick:() => openSession(s.id)})));
+}
+async function openSession(id){
+  const loaded = await api('/api/session/load', {id});
+  rendered = new Set();
+  setKids($('transcript'));
+  renderTranscript({turns:(loaded && loaded.turns) || []});
+  setView('chat');
+}
+async function loadSessions(){
+  const data = await api('/api/sessions');
+  const sessions = (data && data.sessions) || [];
+  $('sessions-sub').textContent = sessions.length + ' sessions';
+  if (!sessions.length){
+    setKids($('sessions-body'), el('div', {class:'empty', text:'No saved conversations yet.'}));
+    return;
+  }
+  const head = el('tr', null, el('th', {text:'first thing asked'}), el('th', {text:'turns'}),
+    el('th', {text:'session'}), el('th', {text:''}));
+  setKids($('sessions-body'), el('table', {class:'rows'}, head, sessions.map(sessionRow)));
+}
+function fileRow(folder, file){
+  const button = el('button', {class:'linkish', text:'ask about it', onclick:() => {
+    // Python accepts forward slashes on Windows, so no separator escaping is needed here.
+    const full = folder + (folder.endsWith('/') ? '' : '/') + file.name;
+    api('/api/send', {text:'Read ' + full + ' and summarise what matters in it.'});
+    setView('chat');
+  }});
+  return el('tr', null,
+    el('td', {text:file.name}),
+    el('td', {class:'num', text:file.kind}),
+    el('td', {class:'num', text:String(file.mb) + ' MB'}),
+    el('td', null, button));
+}
+async function loadFiles(){
+  const data = await api('/api/files');
+  const files = (data && data.files) || [];
+  const folders = (data && data.folders) || [];
+  $('files-sub').textContent = folders.length + ' folders · ' + files.length + ' readable files';
+  const byFolder = new Map();
+  for (const f of files){
+    if (!byFolder.has(f.folder)) byFolder.set(f.folder, []);
+    byFolder.get(f.folder).push(f);
+  }
+  if (!byFolder.size){
+    setKids($('files-body'), el('div', {class:'empty', text:'No folders granted yet.'}));
+    return;
+  }
+  const cards = [];
+  for (const [folder, list] of byFolder){
+    cards.push(el('div', {class:'card'},
+      el('div', {class:'title'}, el('span', {class:'num', text:folder}),
+        el('span', {class:'pill', text:list.length + ' files'})),
+      el('table', {class:'rows'}, list.slice(0, 60).map(f => fileRow(folder, f)))));
+  }
+  setKids($('files-body'), ...cards);
+}
+
+async function loadAgents(){
+  const s = await api('/api/state');
+  // Defensive clone: a malformed agents block must not break the panel.
+  try { agentsDraft = JSON.parse(JSON.stringify(s.agents || {})); } catch (err) { agentsDraft = {}; }
+  const models = ((s.models && s.models.openrouter) || []).slice(0, 40);
+  const cards = Object.entries(agentsDraft).map(([role, cfg]) => {
+    const select = el('select', {style:'min-width:280px;padding:6px 8px;border-radius:8px;border:1px solid var(--line);background:var(--bg-2)'});
+    const options = [cfg.model || ''].concat(models.filter(m => m !== cfg.model));
+    for (const m of options) select.append(el('option', {value:m, text:m || '(pick a model)'}));
+    const fallbacks = el('input', {value:(cfg.fallbacks || []).join(', '),
+      placeholder:'fallbacks, comma separated',
+      style:'flex:1;min-width:240px;padding:6px 8px;border-radius:8px;border:1px solid var(--line);background:var(--bg-2)'});
+    const card = el('div', {class:'card'},
+      el('div', {class:'title'}, el('span', {text:role}), el('span', {class:'pill', text:cfg.tools || ''})),
+      el('div', {style:'display:flex;gap:8px;margin-top:8px;flex-wrap:wrap'}, select, fallbacks));
+    card.dataset.role = role;
+    select.dataset.model = role;
+    fallbacks.dataset.fallbacks = role;
+    return card;
+  });
+  setKids($('agents-body'), cards.length ? cards : [el('div', {class:'empty', text:'agents.json not found.'})]);
+}
+
+const PERSONA_VOICE_RE = /^Neural: kokoro:/;
+function settingsRows(s){
+  const voices = s.tts_voices || [];
+  const persona = voices.filter(v => PERSONA_VOICE_RE.test(v));
+  const fallback = ['Neural: kokoro:af_heart','Neural: kokoro:af_bella','Neural: kokoro:am_michael','Neural: kokoro:am_adam','Neural: kokoro:am_fenrir','Neural: en_US-lessac-high'];
+  const list = [...new Set(persona.length ? persona : fallback)];
+  const sel = (id, label, note) => el('div', {class:'thought', style:'display:block;padding:10px 0'},
+    el('label', {text: label, style:'display:block;font-weight:600;margin-bottom:6px'}),
+    el('select', {id, style:'width:100%;max-width:420px;padding:7px 9px;border-radius:8px;border:1px solid var(--line);background:var(--bg-2)'},
+      list.map(v => el('option', {value: v, text: v}))),
+    el('div', {class:'t', style:'display:block;flex:none;margin-top:5px', text: note}));
+  return [
+    sel('nova-voice', 'Nova — the female voice', 'default: kokoro af_heart (warm). Used when you wake her with "Nova".'),
+    sel('piattos-voice', 'Piattos — the male voice', 'default: kokoro am_michael (natural). Used when you wake him with "Piattos".'),
+    el('div', {class:'thought', style:'display:block;padding:10px 0'},
+      el('label', {text:'Stop words — the only sounds allowed to cut a reply', style:'display:block;font-weight:600;margin-bottom:6px'}),
+      el('input', {id:'barge-triggers', style:'width:100%;max-width:420px;padding:7px 9px;border-radius:8px;border:1px solid var(--line);background:var(--bg-2)'}),
+      el('div', {class:'t', style:'display:block;flex:none;margin-top:5px', text:'comma-separated. "stop, okay, cancel, quiet, enough, wait, shush, nova" — "nova" also means stop-and-listen.'})),
+  ];
+}
+function loadSettings(s){
+  const body = $('settings-body');
+  if (!body.dataset.ready){
+    setKids(body, ...settingsRows(s));
+    body.dataset.ready = '1';
+  }
+  const st = s.settings || {};
+  const nv = $('nova-voice'), pv = $('piattos-voice'), tg = $('barge-triggers');
+  if (!document.activeElement || document.activeElement.id !== 'nova-voice') nv.value = st.nova_voice || nv.value;
+  if (!document.activeElement || document.activeElement.id !== 'piattos-voice') pv.value = st.piattos_voice || pv.value;
+  if (!document.activeElement || document.activeElement.id !== 'barge-triggers') tg.value = (st.barge_triggers || []).join(', ');
+}
+function setView(next){
+  document.querySelectorAll('.rail-item').forEach(b => b.classList.toggle('active', b.dataset.view === next));
+  $('view-chat').hidden = next !== 'chat';
+  $('view-thinking').hidden = next !== 'thinking';
+  $('view-sessions').hidden = next !== 'sessions';
+  $('view-files').hidden = next !== 'files';
+  $('view-agents').hidden = next !== 'agents';
+  $('view-settings').hidden = next !== 'settings';
+  if (next === 'sessions') loadSessions();
+  if (next === 'files') loadFiles();
+  if (next === 'agents') loadAgents();
+}
+/* Thinking pane: the recorded decision stream, newest at the bottom. */
+let thoughtsRendered = -1;
+function renderThinking(s){
+  const list = s.thinking || [];
+  $('thinking-count').textContent = list.length + ' steps (last 80 shown)';
+  if (list.length === thoughtsRendered) return;
+  thoughtsRendered = list.length;
+  const body = $('thinking-body');
+  const stick = body.scrollHeight - body.scrollTop - body.clientHeight < 40;
+  setKids(body, list.map(th =>
+    el('div', {class: 'thought ' + (th.kind || 'step')},
+      el('span', {class: 't', text: th.ts || ''}),
+      el('span', {class: 'dot2'}),
+      el('span', {text: th.msg || ''}))));
+  if (stick) body.scrollTop = body.scrollHeight;
+}
+
+/* Speaker chart: a rolling bar of the level every 140 ms, coloured by who is
+   sounding - the assistant (green), you through the mic (accent), thinking (amber). */
+const wave = {levels: [], tones: [], span: 84, timer: null};
+function drawWave(){
+  const c = $('voice-wave');
+  const g = c.getContext('2d');
+  const w = c.width, h = c.height, mid = h / 2;
+  g.clearRect(0, 0, w, h);
+  g.strokeStyle = 'rgba(128,128,128,.25)';
+  g.beginPath(); g.moveTo(0, mid); g.lineTo(w, mid); g.stroke();
+  const n = wave.levels.length;
+  const bw = w / wave.span;
+  for (let i = 0; i < n; i++){
+    const v = Math.min(1, wave.levels[i] * 5);
+    const bh = Math.max(1.5, v * (h - 4) / 2);
+    g.fillStyle = wave.tones[i];
+    g.fillRect(w - (n - i) * bw, mid - bh, Math.max(1.5, bw - 1), bh * 2);
+  }
+}
+function toneFor(s){
+  if (s.speaking || s.status === 'speaking') return 'var(--ok, #34d399)';
+  if (s.recording) return 'var(--accent, #60a5fa)';
+  if (s.status === 'thinking') return 'var(--warn, #d97706)';
+  return 'rgba(128,128,128,.45)';
+}
+function startWave(){
+  if (wave.timer) return;
+  wave.timer = setInterval(async () => {
+    try {
+      const s = await api('/api/state');
+      if (!s || s.ok === false) return;
+      wave.levels.push(Number(s.level) || 0);
+      wave.tones.push(toneFor(s));
+      if (wave.levels.length > wave.span){ wave.levels.shift(); wave.tones.shift(); }
+      drawWave();
+      $('level-fill').style.width = Math.max(0, Math.min(100, (s.level || 0) * 500)) + '%';
+      $('pill-speaker').textContent = speakerWord(s);
+      $('pill-speaker').className = 'pill' + speakerTone(speakerWord(s));
+      $('speaker-dot').className = 'dot' + speakerTone(speakerWord(s));
+      renderThinking(s);
+    } catch (err) { /* the 800 ms poll reports connection state */ }
+  }, 140);
+}
+
+async function poll(){
+  try {
+    const s = await api('/api/state');
+    if (!s || s.ok === false){ $('status-text').textContent = 'server not responding'; return; }
+    const count = (s.turns || []).length;
+    if (count !== ((state.turns || []).length)) mapData = await api('/api/map');
+    state = s;
+    renderTop(s); renderKpis(s); renderTranscript(s); renderInspector(s); renderThinking(s);
+    if (!$('view-settings').hidden) loadSettings(s);
+    startWave();
+  } catch (err) {
+    $('status-text').textContent = 'disconnected — is the server running?';
+  }
+}
+
+/* events */
+document.querySelectorAll('.rail-item').forEach(b => b.onclick = () => setView(b.dataset.view));
+document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
+  document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x === t));
+  document.querySelectorAll('.tabpanel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + t.dataset.tab));
+});
+$('composer').onsubmit = async (e) => {
+  e.preventDefault();
+  const text = $('input').value.trim();
+  if (!text) return;
+  $('input').value = '';
+  const r = await api('/api/send', {text});
+  if (r && r.ok === false) $('status-text').textContent = 'send failed: ' + (r.error || 'unknown');
+};
+$('btn-listen').onclick = () => api('/api/listen', {mode:'continuous'});
+$('btn-stop').onclick = () => api('/api/stop');
+$('btn-mic').onclick = () => api('/api/listen', {mode:'ptt'});
+$('btn-barge').onclick = () => api('/api/barge');
+$('btn-theme').onclick = () => {
+  const root = document.documentElement;
+  root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark';
+};
+$('btn-grant').onclick = async () => {
+  const path = $('folder-input').value.trim();
+  if (!path) return;
+  const r = await api('/api/folder', {path});
+  $('files-sub').textContent = r && r.ok ? ('granted ' + r.folder) : ('refused: ' + ((r && r.error) || 'unknown'));
+  loadFiles();
+};
+$('btn-save-settings').onclick = async () => {
+  const patch = {
+    nova_voice: $('nova-voice').value,
+    piattos_voice: $('piattos-voice').value,
+    barge_triggers: $('barge-triggers').value.split(',').map(v => v.trim()).filter(Boolean),
+  };
+  const r = await api('/api/settings', patch);
+  $('status-text').textContent = r && r.ok !== false ? 'voice options saved — next reply uses them' : ('save failed: ' + ((r && r.error) || 'unknown'));
+};
+$('btn-save-agents').onclick = async () => {
+  document.querySelectorAll('[data-model]').forEach(sel => { if (agentsDraft[sel.dataset.model]) agentsDraft[sel.dataset.model].model = sel.value; });
+  document.querySelectorAll('[data-fallbacks]').forEach(inp => {
+    if (agentsDraft[inp.dataset.fallbacks]) agentsDraft[inp.dataset.fallbacks].fallbacks = inp.value.split(',').map(v => v.trim()).filter(Boolean);
+  });
+  const r = await api('/api/agents', {config:agentsDraft});
+  $('status-text').textContent = r && r.ok ? 'roster saved — the next turn uses it' : ('save failed: ' + ((r && r.error) || 'unknown'));
+};
+$('transcript').addEventListener('scroll', () => {
+  const box = $('transcript');
+  pinned = box.scrollTop + box.clientHeight >= box.scrollHeight - 40;
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === '/' && document.activeElement !== $('input')){ e.preventDefault(); $('input').focus(); }
+  if (e.key === 'Escape') api('/api/barge');
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) $('composer').requestSubmit();
+  if (e.altKey && ['1','2','3'].includes(e.key)){ const tab = document.querySelectorAll('.tab')[Number(e.key) - 1]; if (tab) tab.click(); }
+});
+setView('chat');
+poll();
+setInterval(poll, 800);
+</script>
+</body>
+</html>

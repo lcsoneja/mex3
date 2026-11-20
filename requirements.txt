@@ -1,0 +1,17 @@
+# SONJ3 core runtime dependencies (Windows / Linux / Raspberry Pi / macOS).
+# Python 3.10-3.12 is the supported range (sherpa-onnx wheels).
+# Install with:  python install.py   (creates .venv and adds platform extras)
+# or manually:   python -m pip install -r requirements.txt
+numpy>=1.26
+scipy>=1.11
+sounddevice>=0.4.6
+soundfile>=0.12
+requests>=2.31
+sherpa-onnx>=1.10
+psutil>=5.9
+Pillow>=10.0
+
+# Optional, added by install.py per platform / feature:
+#   ddgs        - keyless web search provider
+#   pywebview   - native desktop window (falls back to a browser window if absent)
+#   pywin32     - Windows SAPI voice (Windows only; neural Piper works everywhere)

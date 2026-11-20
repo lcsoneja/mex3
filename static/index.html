@@ -1,0 +1,2534 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SONJ4 · agent console</title>
+<style>
+:root{
+  --bg:#0d1017; --bg2:#12161f; --panel:#161b26; --panel2:#1c2231; --line:#262d3d;
+  --text:#e7ebf3; --dim:#8b94a7; --accent:#5aa2ff; --ok:#34d399; --warn:#f59e0b;
+  --bad:#ef4444; --user:#8b5cf6; --r:10px;
+}
+[data-theme="light"]{
+  --bg:#f5f6fa; --bg2:#eceef4; --panel:#ffffff; --panel2:#f0f2f8; --line:#dde1ec;
+  --text:#1a1f2b; --dim:#626b7e; --accent:#2563eb; --ok:#059669; --warn:#b45309;
+  --bad:#dc2626; --user:#7c3aed;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:13px/1.5 "Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+.shell{display:grid;grid-template-rows:50px 1fr 30px;height:100vh}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+input,select{font:inherit;color:var(--text);background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:7px 10px}
+input:focus,select:focus{outline:1px solid var(--accent)}
+.btn{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:5px 11px;font-size:12.5px;white-space:nowrap}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.danger{border-color:var(--bad);color:var(--bad)}
+.pill{display:inline-block;padding:3px 10px;border:1px solid var(--line);border-radius:999px;font-size:11.5px;color:var(--dim);background:var(--bg2);white-space:nowrap}
+.pill.live{color:var(--accent);border-color:var(--accent)} .pill.ok{color:var(--ok);border-color:var(--ok)}
+.pill.warn{color:var(--warn);border-color:var(--warn)} .pill.num{font-variant-numeric:tabular-nums}
+/* topbar */
+.topbar{display:flex;align-items:center;gap:10px;padding:0 14px;border-bottom:1px solid var(--line);background:var(--bg2)}
+.brand{font-weight:700;font-size:14px} .brand i{color:var(--accent);font-style:normal}
+.topbar .grow{flex:1}
+#model-pop{position:absolute;top:46px;right:210px;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:8px;box-shadow:0 8px 30px rgba(0,0,0,.45);display:none;min-width:320px;max-height:50vh;overflow:auto;z-index:30}
+#model-pop.open{display:block}
+#model-pop option{padding:4px}
+/* body */
+.body{display:grid;grid-template-columns:auto 1fr 6px var(--inspw,340px);min-height:0;overflow:hidden}
+.body.wide{grid-template-columns:190px 1fr}
+.rail{border-right:1px solid var(--line);padding:10px 8px;display:flex;flex-direction:column;gap:2px;background:var(--bg2);width:190px;min-width:190px;min-height:0;transition:width .12s;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin}
+.rail.collapsed{width:56px;min-width:56px}
+.rail.collapsed .lb,.rail.collapsed .sep,.rail.collapsed .railhead .lk{display:none}
+.railhead{display:flex;gap:4px;padding:0 2px 8px;flex:none}
+.railhead button{font-size:12px;line-height:1;padding:4px 8px;border:1px solid var(--line);border-radius:6px;color:var(--dim)}
+.railhead button:hover{color:var(--text)}
+#divider{cursor:col-resize;background:var(--bg2);border-left:1px solid var(--line)}
+#divider:hover{background:var(--panel2)}
+.rail button{display:flex;gap:9px;align-items:center;padding:7px 10px;border-radius:8px;color:var(--dim);text-align:left;font-size:13px;flex:none}
+.rail button:hover{color:var(--text);background:var(--panel2)}
+.rail button.on{color:var(--text);background:var(--panel2);box-shadow:inset 2px 0 0 var(--accent)}
+.rail .sep{margin:8px 6px 4px;font-size:10.5px;letter-spacing:.08em;color:var(--dim);text-transform:uppercase;flex:none}
+.rail .sys-nav{flex:none}
+#doc-confirm-banner{position:fixed;top:58px;right:18px;z-index:80;max-width:390px;background:var(--panel);border:1.5px solid var(--warn);border-radius:12px;padding:12px 14px;box-shadow:0 12px 34px rgba(0,0,0,.55)}
+#doc-confirm-banner.hidden{display:none}
+/* main column */
+main{min-width:0;min-height:0;overflow:hidden;display:flex;flex-direction:column}
+section{min-height:0;display:flex;flex-direction:column;flex:1}
+.phead{display:flex;align-items:center;gap:9px;padding:10px 14px;border-bottom:1px solid var(--line)}
+.phead h2{margin:0;font-size:13.5px;font-weight:650}
+.pbody{flex:1;overflow:auto;padding:14px;min-height:0}
+/* chat */
+#transcript{flex:1;overflow:auto;padding:14px 16px;display:flex;flex-direction:column;gap:12px;min-height:0}
+.trow{display:grid;gap:6px;max-width:86%}
+.trow.user{justify-self:end;justify-items:end}
+.trow.assistant{justify-self:start}
+.trow .meta{font-size:11px;color:var(--dim)}
+.trow .bub{padding:9px 12px;border-radius:12px;background:var(--panel);border:1px solid var(--line);white-space:pre-wrap;word-break:break-word}
+.trow.user .bub{background:color-mix(in srgb,var(--user) 16%,var(--panel));border-color:color-mix(in srgb,var(--user) 40%,var(--line))}
+.trow .bub.error{border-color:var(--bad)}
+/* tool cards (pi.dev style) */
+details.tool{border:1px solid var(--line);border-radius:9px;background:var(--bg2);font-size:12px}
+details.tool summary{cursor:pointer;padding:6px 10px;display:flex;gap:8px;align-items:center;list-style:none;color:var(--dim)}
+details.tool summary::-webkit-details-marker{display:none}
+details.tool .nm{color:var(--text);font-family:ui-monospace,Consolas,monospace}
+details.tool .st{margin-left:auto}
+details.tool .st.ok{color:var(--ok)} details.tool .st.fail{color:var(--bad)}
+details.tool .bd{padding:6px 10px;border-top:1px solid var(--line);color:var(--dim);font-family:ui-monospace,Consolas,monospace;white-space:pre-wrap;word-break:break-word;max-height:180px;overflow:auto}
+/* thinking block */
+details.think{border:1px dashed var(--line);border-radius:9px;color:var(--dim);font-size:12px}
+details.think summary{cursor:pointer;padding:5px 10px;list-style:none}
+details.think summary::-webkit-details-marker{display:none}
+details.think .bd{padding:4px 12px 8px;max-height:200px;overflow:auto}
+.thline{display:flex;gap:8px;padding:2px 0}
+.thline .ts{color:var(--dim);font-variant-numeric:tabular-nums;flex:none}
+/* composer */
+.composer{display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--line);background:var(--bg2)}
+.composer input{flex:1}
+/* split view: conversation on top, agent terminals below */
+#chat-top{flex:1 1 var(--chattop,50%);display:flex;flex-direction:column;min-height:140px}
+#vdivider{height:6px;cursor:row-resize;background:var(--bg2);border-top:1px solid var(--line);border-bottom:1px solid var(--line);flex:none}
+#vdivider:hover{background:var(--panel2)}
+#vdivider.hidden{display:none}
+#lower{flex:1 1 calc(100% - var(--chattop,50%));display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:6px;padding:6px;min-height:110px;overflow:auto;background:var(--bg2)}
+#lower.collapsed{display:none}
+#lower.zoom .lbody{font-size:11px;line-height:1.45}
+.lpane{display:flex;flex-direction:column;min-width:0;min-height:110px;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
+.lpane>h4{margin:0;padding:4px 7px;font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--dim);border-bottom:1px solid var(--line);display:flex;gap:5px;align-items:center}
+.lpane>h4 .pill{margin-left:auto}
+.lpane>h4 .expbtn{padding:1px 6px;border:1px solid var(--line);border-radius:5px;font-size:10px;color:var(--accent);background:var(--bg2);line-height:1.2}
+.lpane>h4 .expbtn:hover{border-color:var(--accent);background:var(--panel2)}
+.lpane .lbody{flex:1;overflow:auto;padding:4px 7px;font-family:ui-monospace,Consolas,monospace;font-size:6px;line-height:1.4;white-space:pre-wrap;word-break:break-word}
+/* expanded agent terminal modal */
+#pane-modal{position:fixed;inset:24px;z-index:50;background:var(--panel);border:1px solid var(--accent);border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,.65);display:none;flex-direction:column;overflow:hidden}
+#pane-modal.open{display:flex}
+#pane-modal-head{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--bg2)}
+#pane-modal-head h3{margin:0;font-size:13.5px;text-transform:uppercase;letter-spacing:.06em}
+#pane-modal-body{flex:1;overflow:auto;padding:12px 16px;font-family:ui-monospace,Consolas,monospace;font-size:12.5px;line-height:1.55;white-space:pre-wrap;word-break:break-word;background:var(--bg)}
+#pane-modal-body .mline{padding:3px 0;border-bottom:1px dashed rgba(128,128,128,.16)}
+#pane-modal-foot{display:flex;gap:8px;padding:10px 14px;border-top:1px solid var(--line);background:var(--bg2)}
+#pane-modal-foot input{flex:1}
+.k-think{color:var(--dim);font-style:italic}
+.k-tool{color:var(--accent)}
+.k-tool_result{color:var(--dim)}
+.k-compact,.k-retry{color:var(--warn)}
+.k-pi{color:var(--ok)}
+/* interrupt countdown chip */
+#btn-count{display:none;align-items:center;gap:6px}
+#btn-count.on{display:inline-flex}
+#btn-count b{font-variant-numeric:tabular-nums}
+/* inspector */
+.inspector{border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0;background:var(--bg2)}
+.tabs{display:flex;gap:2px;padding:8px 10px 0}
+.tabs button{padding:5px 11px;border-radius:8px 8px 0 0;color:var(--dim);border:1px solid transparent;border-bottom:none}
+.tabs button.on{color:var(--text);background:var(--panel);border-color:var(--line)}
+.tpanel{flex:1;overflow:auto;background:var(--panel);border-top:1px solid var(--line);padding:10px;min-height:0}
+.card{border:1px solid var(--line);border-radius:9px;padding:9px 11px;margin-bottom:8px;background:var(--bg2)}
+.card .row{display:flex;gap:8px;align-items:center;font-size:12px}
+.card .sub{color:var(--dim);font-size:11.5px;margin-top:3px}
+.kv{display:flex;gap:6px;flex-wrap:wrap;margin-top:5px;font-size:11.5px;color:var(--dim)}
+.node{padding:4px 0;border-bottom:1px dashed var(--line);font-size:12px;color:var(--dim)}
+.node b{color:var(--text)}
+.task-thread{margin-top:8px;border:1px solid var(--line);border-radius:8px;background:var(--panel);font-size:12px}
+.task-thread summary{padding:6px 9px;cursor:pointer;color:var(--accent)}
+.task-prompt,.task-report{padding:8px 10px;border-top:1px solid var(--line);white-space:pre-wrap;word-break:break-word}
+.task-prompt b,.task-report b,.task-steps>b{display:block;margin-bottom:4px;color:var(--text)}
+.task-steps{padding:8px 10px;border-top:1px solid var(--line)}
+.task-step{margin-left:14px;padding:3px 0 3px 8px;border-left:2px solid var(--line);color:var(--dim);white-space:pre-wrap;word-break:break-word}
+.source-drop{padding:18px 12px;border:1px dashed var(--line);border-radius:10px;text-align:center;color:var(--dim);background:var(--bg2)}
+.source-drop.dragover{border-color:var(--accent);color:var(--accent);background:var(--panel2)}
+.source-list{display:grid;gap:6px;margin-top:12px}
+.source-item{display:flex;align-items:center;gap:9px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg2);word-break:break-word}
+.source-item input{flex:none}
+.reaction{align-self:start;padding:3px 9px;color:var(--dim);font-size:11.5px}
+.reaction.liked{color:var(--accent);border-color:var(--accent)}
+/* statusbar */
+.statusbar{display:flex;align-items:center;gap:10px;padding:0 12px;border-top:1px solid var(--line);background:var(--bg2);font-size:11.5px;color:var(--dim)}
+.loading-pill{display:inline-flex;align-items:center;gap:7px;padding:2px 9px;border-radius:999px;border:1px solid var(--line);background:var(--panel);color:var(--dim);font-size:11px;min-width:0;max-width:340px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.loading-pill.busy{border-color:var(--accent);color:var(--text)}
+.dot-square{display:inline-grid;grid-template-columns:repeat(2,4px);grid-template-rows:repeat(2,4px);gap:3px;width:11px;height:11px;flex:none;align-items:center;justify-items:center}
+.dot-square i{display:block;width:4px;height:4px;border-radius:50%;background:var(--dim);opacity:.55;transition:background .15s,opacity .15s}
+.dot-square.active{animation:dotSqSpin 1.15s linear infinite}
+.dot-square.active i{background:var(--accent);opacity:1}
+.dot-square.active i:nth-child(2){opacity:.78}
+.dot-square.active i:nth-child(3){opacity:.55}
+.dot-square.active i:nth-child(4){opacity:.35}
+@keyframes dotSqSpin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
+.think-inline{display:inline-flex;align-items:center;gap:8px;color:var(--dim)}
+.meter{width:110px;height:5px;border-radius:999px;background:var(--panel);overflow:hidden}
+.meter i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--ok))}
+#voice-wave{height:22px;border-radius:7px;background:var(--panel);border:1px solid var(--line)}
+.grow{flex:1}
+.hidden{display:none !important}
+.err{margin:0 14px;padding:7px 12px;border:1px solid var(--bad);border-radius:9px;color:var(--bad);font-size:12px}
+/* dashboard */
+.dash{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.dash .full{grid-column:1/-1}
+.dcard{border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:10px 12px;min-width:0}
+.dcard h3{margin:0 0 8px;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--dim);display:flex;gap:8px;align-items:center}
+.dcard h3 .grow{flex:1}
+.kvs{display:flex;flex-wrap:wrap;gap:8px}
+.kvs .kv2{display:flex;flex-direction:column;gap:2px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg2);min-width:96px}
+.kvs .kv2 b{font-size:14px;font-variant-numeric:tabular-nums}
+.kvs .kv2 span{font-size:10.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em}
+.trace{max-height:240px;overflow:auto;font-family:ui-monospace,Consolas,monospace;font-size:12px;background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:6px 9px}
+.dir-list{max-height:190px;overflow:auto;font-family:ui-monospace,Consolas,monospace;font-size:11.5px;background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:6px 9px}
+.dir-list .d{display:flex;gap:8px;padding:2px 0;border-bottom:1px dashed var(--line)}
+.dir-list .d .n{flex:1}
+.dir-list .d .s{color:var(--dim);flex:none}
+#db-dir-path{color:var(--text);background:var(--bg2);border:1px solid var(--line);border-radius:6px;padding:4px 8px;font-family:ui-monospace,Consolas,monospace;font-size:11.5px;cursor:copy;user-select:all;word-break:break-all}
+#model-pop select option{padding:3px}
+#model-pop optgroup{color:var(--accent);font-style:normal;font-weight:600}
+.trace .t{display:flex;gap:8px;padding:2px 0;border-bottom:1px dashed var(--line)}
+.trace .t:last-child{border-bottom:none}
+.trace .t .k{flex:none;color:var(--accent);min-width:56px}
+.trace .t .ts{flex:none;color:var(--dim);font-variant-numeric:tabular-nums}
+.trace .t .m{flex:1;word-break:break-word}
+.trace .t.now .m{color:var(--warn)}
+.role-inline{display:grid;gap:4px}
+.role-inline .rrow{display:grid;grid-template-columns:88px 1fr 118px;gap:8px;align-items:center;padding:4px 0;border-bottom:1px dashed var(--line)}
+.role-inline .rrow:last-child{border-bottom:none}
+.role-inline select{padding:4px 8px;font-size:12px}
+.role-inline .st{font-size:11px;color:var(--dim)}
+.studio{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.canvas{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;align-items:start}
+.col{border:1px dashed var(--line);border-radius:8px;padding:6px;min-height:110px;background:var(--bg2)}
+.col h4{margin:0 0 6px;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim)}
+.node2{border:1px solid var(--line);border-radius:7px;padding:4px 7px;margin-bottom:5px;font-size:11.5px;background:var(--panel);word-break:break-word}
+.node2.agent{border-left:3px solid var(--accent)} .node2.task{border-left:3px solid var(--warn)} .node2.tool{border-left:3px solid var(--ok)}
+.chip{display:inline-block;padding:2px 8px;margin:2px;border:1px solid var(--line);border-radius:999px;background:var(--bg2);cursor:pointer;font-size:11px}
+.chip.on{border-color:var(--accent);color:var(--accent)}
+.chip.agent{border-color:color-mix(in srgb,var(--accent) 60%,var(--line))}
+.chip.task{border-color:color-mix(in srgb,var(--warn) 60%,var(--line))}
+.chip.tool{border-color:color-mix(in srgb,var(--ok) 60%,var(--line))}
+.timeline{max-height:200px;overflow:auto;font-size:11.5px}
+.timeline .tl{display:flex;gap:8px;padding:3px 0;border-bottom:1px dashed var(--line)}
+.timeline .tl .ts{color:var(--dim);flex:none;font-variant-numeric:tabular-nums}
+.srow{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:4px 0}
+@media (max-width:1150px){.studio,.canvas{grid-template-columns:1fr}}
+/* inspector v2: a 2-column stack of compact panes, font size 8 */
+/* modern thin scrollbars everywhere (#4) */
+*{scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--line);border-radius:999px;border:2px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-thumb:hover{background:var(--dim);background-clip:content-box}
+/* workflow indicator dots (#3) */
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--line);margin-right:5px;flex:none}
+.dot.on{background:var(--ok);box-shadow:0 0 6px var(--ok)}
+.dot.busy{background:var(--warn);box-shadow:0 0 6px var(--warn);animation:pulse 1s infinite}
+@keyframes pulse{50%{opacity:.35}}
+/* round-table + doctor chat (#7) */
+.rtbox{border:1px solid var(--line);border-radius:8px;background:var(--bg2);padding:6px}
+.rtbox .chips{margin:4px 0}
+.rtlog div{padding:2px 0;border-bottom:1px dashed var(--line);word-break:break-word}
+.desc{color:var(--dim);font-size:8px;margin:2px 0}
+.panes{flex:1;overflow:auto;display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:6px;min-height:0;align-content:start}
+#tab-workflow{display:grid;grid-template-columns:1fr 1fr;gap:3px 10px;align-items:center}
+.vbar-row{display:flex;align-items:center;gap:6px;margin:3px 0;font-size:10px}
+.vbar-track{flex:1;height:6px;background:var(--bg);border:1px solid var(--line);border-radius:4px;overflow:hidden}
+.vbar-fill{display:block;height:100%;background:var(--accent);transition:width .2s}
+.lblock-row{display:flex;align-items:center;gap:8px;margin:4px 0;font-size:11px}
+.lblock-bar{flex:1;height:14px;display:flex;border-radius:4px;overflow:hidden;background:var(--bg);border:1px solid var(--line)}
+.sys-nav{margin-top:auto;padding-top:6px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:2px}
+.pane{border:1px solid var(--line);border-radius:8px;background:var(--panel);display:flex;flex-direction:column;min-width:0;min-height:0}
+.pane.wide{grid-column:1/-1}
+.pane>h4{margin:0;padding:4px 8px;font-size:8.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);display:flex;gap:6px;align-items:center;cursor:pointer;border-bottom:1px solid var(--line)}
+.pane>h4:hover{color:var(--text)}
+.pane.closed .pcontent{display:none}
+.pcontent{font-size:8px;line-height:1.5;overflow:auto;padding:4px 6px;min-height:0}
+.pcontent .pv{display:flex;gap:6px;padding:2px 0;border-bottom:1px dashed var(--line)}
+.pcontent .pv .k{flex:none;color:var(--accent)}
+.pcontent .pv .st{flex:1;color:var(--dim)}
+.pcontent .pv.on .st{color:var(--warn)}
+.pcontent .pv .lt{flex:none;color:var(--dim);font-variant-numeric:tabular-nums}
+.pcontent .tree div{white-space:pre-wrap;font-family:ui-monospace,Consolas,monospace}
+.pcontent .tree .on{color:var(--warn)}
+.pcontent .tree .dim{color:var(--dim)}
+.pcontent .agedit{border-bottom:1px solid var(--line);padding-bottom:4px;margin-bottom:4px}
+.pcontent .agedit .rrow{grid-template-columns:70px 1fr 104px;font-size:8px}
+.pcontent .agedit select{font-size:8px;padding:2px 4px}
+.pcontent .cot{color:var(--dim)}
+.pcontent .cot div{padding:1px 0;word-break:break-word}
+.trow.agent{justify-self:start;justify-items:start}
+.bub.agentb{background:var(--panel)}
+.latchip{font-size:8.5px;color:var(--dim);font-variant-numeric:tabular-nums;justify-self:start}
+.pill.wake{cursor:pointer}
+.pill.wake.on{color:var(--ok);border-color:var(--ok)}
+@media (max-width:1150px){.body{grid-template-columns:64px 1fr}.inspector{display:none}.rail button span.lb{display:none}.rail .sep{display:none}}
+/* pipeline + performance views */
+.plwrap{display:flex;gap:10px;align-items:stretch;flex-wrap:wrap}
+.plstage{flex:1;min-width:220px;border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:10px;display:flex;flex-direction:column;gap:6px}
+.plstage h3{margin:0;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--accent)}
+.plstage .plbackend{font-size:11px;color:var(--text);word-break:break-all}
+.plstage .pllat{font-size:10px;color:var(--dim)}
+.plstage .plcfg{display:flex;flex-direction:column;gap:5px;border-top:1px solid var(--line);padding-top:6px;margin-top:2px}
+.plstage select,.plstage input[type=password],.plstage input[type=text]{width:100%;background:var(--bg2);color:var(--text);border:1px solid var(--line);border-radius:6px;font-size:10.5px;padding:3px 5px}
+.plstage label{font-size:9.5px;color:var(--dim);display:flex;align-items:center;gap:5px}
+.plarrow{align-self:center;color:var(--dim);font-size:18px}
+.qstrip{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.qstrip .qcell{flex:1;min-width:110px;border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:7px 9px;text-align:center}
+.qstrip .qcell b{display:block;font-size:17px;color:var(--text)}
+.qstrip .qcell span{font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em}
+.qstrip .qcell.warn b{color:var(--warn)}
+.qstrip .qcell.bad b{color:var(--bad)}
+.perfgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.perfcard{border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:8px 10px}
+.perfcard h4{margin:0 0 5px;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim)}
+.perfcard canvas{width:100%;height:110px;background:var(--bg2);border-radius:6px}
+.perfstat{font-size:10px;color:var(--dim);margin-top:4px}
+@media (max-width:1150px){.perfgrid{grid-template-columns:1fr}}
+/* documentation markdown */
+.md{font-size:12px;line-height:1.55;color:var(--text);max-width:900px}
+.md h2{font-size:16px;margin:14px 0 6px;border-bottom:1px solid var(--line);padding-bottom:4px}
+.md h3{font-size:13.5px;margin:12px 0 4px;color:var(--accent)}
+.md h4,.md h5{font-size:12px;margin:10px 0 4px}
+.md p{margin:6px 0}
+.md ul,.md ol{margin:6px 0 6px 20px}
+.md li{margin:3px 0}
+.md code{background:var(--bg2);border:1px solid var(--line);border-radius:4px;padding:0 4px;font-family:ui-monospace,Consolas,monospace;font-size:11px}
+.md pre{background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;overflow:auto;font-family:ui-monospace,Consolas,monospace;font-size:11px;line-height:1.45}
+.md table{border-collapse:collapse;margin:8px 0;font-size:11.5px}
+.md th,.md td{border:1px solid var(--line);padding:4px 8px;text-align:left}
+.md th{background:var(--bg2)}
+.md hr{border:none;border-top:1px solid var(--line);margin:12px 0}
+.md a{color:var(--accent)}
+</style>
+</head>
+<body>
+<div id="doc-confirm-banner" class="hidden" role="dialog" aria-label="Doctor setting confirmation">
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+    <span style="font-size:15px">🩺</span>
+    <b id="doc-confirm-text">Doctor setting change</b>
+    <span class="grow"></span>
+    <span class="pill warn num" id="doc-confirm-timer">15s</span>
+  </div>
+  <div id="doc-confirm-sub" style="font-size:11.5px;color:var(--dim);margin-bottom:10px">Auto-confirms when timer hits 0 unless cancelled.</div>
+  <div style="display:flex;gap:8px;justify-content:flex-end">
+    <button class="btn" id="btn-doc-cancel" type="button">Cancel</button>
+    <button class="btn primary" id="btn-doc-confirm" type="button">Confirm Now</button>
+  </div>
+</div>
+<div class="shell">
+  <header class="topbar">
+    <span class="brand"><i>›</i> SONJ4</span>
+    <span class="pill num" id="pill-session">New Chat</span>
+    <button class="btn" id="btn-new-session" type="button" title="Start a fresh chat session">+ New Chat</button>
+    <span class="pill" id="pill-speaker">idle</span>
+    <span class="grow"></span>
+    <span class="pill num" id="pill-spend">$0.0000</span>
+    <button class="btn" id="btn-model">model: …</button>
+    <button class="btn" id="btn-listen" title="hands-free listening">⏵ Listen</button>
+    <button class="btn danger" id="btn-barge" title="cut the reply now">■ Stop</button>
+    <button class="btn" id="btn-count" title="The reply is playing — click to interrupt now. Otherwise the agent finishes its whole answer.">⟳ interrupt<b id="count-secs"></b></button>
+    <button class="pill wake" id="btn-wake" title="wake gate: only Nova / Piattos starts a turn from idle">wake: off</button>
+    <button class="btn" id="btn-restart" type="button" title="Restart and reinitialize SONJ engine">↻ Restart</button>
+    <button class="btn" id="btn-theme">◐</button>
+    <div id="model-pop">
+      <label style="font-size:11px;color:var(--dim)">model — grouped by provider, type to search</label>
+      <input id="model-search" placeholder="search 400+ models… e.g. deepseek" style="width:100%;margin:6px 0">
+      <select id="model-select" size="14" style="width:100%"></select>
+    </div>
+  </header>
+  <div class="body" id="bodygrid">
+    <nav class="rail">
+      <div class="railhead">
+        <button id="btn-rail" title="collapse / expand this rail">«</button>
+        <button id="btn-rail-lock" class="lk" title="lock the rail open">🔓</button>
+      </div>
+      <button data-view="dashboard" class="on"><span>◱</span><span class="lb">Dashboard</span></button>
+      <button data-view="chat"><span>▸</span><span class="lb">Chat</span></button>
+      <button data-view="sessions"><span>◫</span><span class="lb">Sessions</span></button>
+      <button data-view="files"><span>▤</span><span class="lb">Files</span></button>
+      <button data-view="sources"><span>⊕</span><span class="lb">Sources</span></button>
+      <button data-view="agents"><span>◍</span><span class="lb">Agents</span></button>
+      <button data-view="docs"><span>📄</span><span class="lb">Documentation</span></button>
+      <button data-view="pipeline"><span>⇶</span><span class="lb">Pipeline</span></button>
+      <button data-view="performance"><span>📈</span><span class="lb">Performance</span></button>
+      <button data-view="voices"><span>🎙</span><span class="lb">Voices</span></button>
+      <div class="sep">capabilities</div>
+      <button data-view="skills"><span>⚡</span><span class="lb">Skills</span></button>
+      <button data-view="mcp"><span>⛁</span><span class="lb">MCP</span></button>
+      <div class="sep">engine</div>
+      <button data-view="thinking"><span>⊙</span><span class="lb">Thinking</span></button>
+      <button data-view="settings"><span>⚙</span><span class="lb">Settings</span></button>
+      <div class="sys-nav">
+        <div class="sep">internals (read-only)</div>
+        <button data-view="sysinfo" data-sys="prompts"><span>📜</span><span class="lb">System Prompts</span></button>
+        <button data-view="sysinfo" data-sys="context"><span>🧠</span><span class="lb">Context File</span></button>
+        <button data-view="sysinfo" data-sys="skills"><span>📚</span><span class="lb">Skill Directory</span></button>
+        <button data-view="sysinfo" data-sys="tools"><span>🔧</span><span class="lb">Tool Definitions</span></button>
+      </div>
+    </nav>
+    <main>
+      <section id="view-dashboard" class="hidden">
+        <div class="phead"><h2>Dashboard</h2><span class="pill" id="db-cwd" title="main directory">…</span><span class="grow"></span><span class="pill num" id="db-tokens">0 tok</span><span class="pill num" id="db-spend">$0</span><span class="pill" id="db-doctor">doctor</span></div>
+        <div class="pbody"><div class="dash" id="dashboard-body"></div></div>
+      </section>
+      <section id="view-chat">
+        <div class="phead"><h2>Conversation</h2><span class="pill" id="chat-cwd" title="main directory">…</span><span class="pill" id="chat-status">idle</span><span class="pill" id="chat-clf" title="Decision Classifier (<100ms, +10% Front bias)">clf: ready</span><span class="pill ok" id="chat-barge-pill" title="Click to toggle interruption mode">🎤 interrupt: natural</span><span class="pill warn hidden" id="err-pill">error</span><span class="pill" id="chat-quality" title="live session quality: interruptions · incomplete tasks · errors · clarifications">…</span><button class="btn" id="btn-export" title="save this conversation to a markdown file">⬇ export</button><span class="pill" id="boot-pill" title="startup health check">boot</span><span class="grow"></span><button class="btn" id="btn-lower-zoom" title="toggle readable font in lower panes">A+</button><button class="btn" id="btn-lower" title="show / hide the agent terminals">▤ panes</button></div>
+        <div class="err hidden" id="err-banner"></div><button class="btn hidden" id="btn-ask-doctor" title="send this error to the Doctor agent for diagnosis">🩺 Ask Doctor</button>
+
+        <div id="chat-top">
+          <div id="transcript" aria-live="polite"></div>
+          <form class="composer" id="composer">
+            <div id="attach-chips" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+            <input id="input" placeholder="› ask anything — paste an image here (Ctrl+V) · /help" autocomplete="off">
+            <button class="btn" type="button" id="btn-mic" title="push to talk: record, then Stop to submit">🎤</button>
+            <button class="btn primary" type="submit">Send</button>
+          </form>
+        </div>
+        <div id="vdivider" title="drag to resize conversation / agent terminals"></div>
+        <div id="lower">
+          <div class="lpane" id="lpane-community">
+            <h4><span>community · agents talking</span><span class="pill" id="lpane-state-community">feed</span><button class="expbtn" type="button" title="Expand terminal" onclick="openPaneModal('community')">⤢ Expand</button></h4>
+            <div class="lbody" id="lbody-community"></div>
+          </div>
+        </div>
+      </section>
+      <section id="view-sessions" class="hidden">
+        <div class="phead"><h2>Sessions</h2><span class="pill" id="sessions-sub"></span></div>
+        <div class="pbody" id="sessions-body"></div>
+      </section>
+      <section id="view-files" class="hidden">
+        <div class="phead"><h2>Files</h2><span class="pill" id="files-sub"></span><span class="grow"></span><input id="folder-input" placeholder="grant a folder path" style="width:240px"><button class="btn" id="btn-grant">Grant</button></div>
+        <div class="pbody" id="files-body"></div>
+      </section>
+      <section id="view-sources" class="hidden">
+        <div class="phead"><h2>Sources</h2><span class="pill" id="sources-sub">0 sources</span></div>
+        <div class="pbody">
+          <div class="source-drop" id="source-drop" tabindex="0">Drop files here to add their names as chat sources.</div>
+          <div class="source-list" id="source-list"></div>
+        </div>
+      </section>
+      <section id="view-agents" class="hidden">
+        <div class="phead"><h2>Agents</h2><span class="pill">routing · agents.json</span><span class="grow"></span><button class="btn primary" id="btn-save-agents">Save roster</button></div>
+        <div class="pbody" id="agents-body"></div>
+      </section>
+      <section id="view-docs" class="hidden">
+        <div class="phead"><h2>Documentation</h2><span class="pill">SONJ manual</span><span class="grow"></span><button class="btn on" id="docs-tab-full" type="button">Whole documentation</button><button class="btn" id="docs-tab-summary" type="button">Summary</button></div>
+        <div class="pbody"><div id="docs-body" class="md"></div></div>
+      </section>
+      <section id="view-pipeline" class="hidden">
+        <div class="phead"><h2>Pipeline</h2><span class="pill">interactive architecture</span><span class="pill" id="pipeline-e2e">e2e —</span><span class="pill" id="pipeline-ack">ack —</span><span class="grow"></span><span class="pill">click a stage to change its backend</span></div>
+        <div class="pbody"><div id="pipeline-body" class="plwrap"></div></div>
+      </section>
+      <section id="view-performance" class="hidden">
+        <div class="phead"><h2>Performance</h2><span class="pill">live · this session</span><span class="grow"></span><span class="pill" id="perf-turns">0 turns</span><button class="btn" id="btn-latency-report" type="button">Export report</button></div>
+        <div class="pbody">
+          <div id="perf-quality" class="qstrip"></div>
+          <div id="el-credits" class="perfcard" style="margin-bottom:10px"><h4>ElevenLabs credits · live</h4><div id="el-credit-body" class="perfstat">—</div></div>
+          <div class="perfgrid">
+            <div class="perfcard"><h4>ASR (ms)</h4><canvas id="chart-asr" width="420" height="110"></canvas><div class="perfstat" id="stat-asr">—</div></div>
+            <div class="perfcard"><h4>LLM first token (ms)</h4><canvas id="chart-llm" width="420" height="110"></canvas><div class="perfstat" id="stat-llm">—</div></div>
+            <div class="perfcard"><h4>Time to first audio (ms)</h4><canvas id="chart-ttfa" width="420" height="110"></canvas><div class="perfstat" id="stat-ttfa">—</div></div>
+            <div class="perfcard"><h4>Utterance → speaker E2E (ms)</h4><canvas id="chart-e2e" width="420" height="110"></canvas><div class="perfstat" id="stat-e2e">—</div></div>
+          </div>
+          <div class="perfcard" style="margin-top:8px">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+              <h4 style="margin:0">Session performance review</h4>
+              <span class="grow"></span>
+              <button class="btn" id="btn-perf-review" type="button">Review session</button>
+            </div>
+            <div id="perf-review-body" class="perfstat">—</div>
+          </div>
+          <div class="perfcard" style="margin-top:8px"><h4>Reply latency blocks (ASR · TTFT · LLM gen · TTS)</h4><div id="perf-blocks"></div></div>
+          <div class="perfcard" style="margin-top:8px"><h4>Per-feature Memory &amp; CPU distribution</h4><div id="perf-dist"></div></div>
+          <div class="perfcard" style="margin-top:8px"><h4>Audio &amp; Gate Funnel · Room SNR · Pi Headroom</h4><div id="perf-funnel" class="perfstat">—</div></div>
+          <div class="perfcard" style="margin-top:8px"><h4>Per-Model Speed, Latency &amp; Cost Benchmarks</h4><div id="perf-scorecard" class="perfstat">—</div></div>
+          <div class="perfcard" style="margin-top:8px"><h4>Stage percentiles (last 50 turns)</h4><div id="perf-table" class="md"></div></div>
+        </div>
+      </section>
+      <section id="view-voices" class="hidden">
+        <div class="phead">
+          <h2>Voices &amp; Wake-Word Dashboard</h2>
+          <span class="pill" id="v-master-pill">unlocked</span>
+          <span class="pill" id="v-bg-pill">bg scan: auto (view open)</span>
+          <span class="pill" id="v-action-msg" style="color:var(--ok)">ready</span>
+          <span class="grow"></span>
+          <label class="srow" style="font-size:11px;gap:4px" title="Higher = stricter separation; lower = fewer splits">Strictness <input id="v-thresh" type="range" min="0.20" max="0.55" step="0.02" value="0.34" style="width:76px"><span id="v-thresh-val">0.34</span></label>
+          <label class="srow" style="font-size:11px;cursor:pointer;gap:4px"><input id="v-bg-always" type="checkbox" style="width:auto"> Always track BG</label>
+          <button class="btn" id="btn-v-unlock" type="button">Unlock master</button>
+          <button class="btn" id="btn-v-reset" type="button">Reset roster</button>
+        </div>
+        <div class="pbody">
+          <div id="v-telemetry" class="perfcard" style="margin-bottom:8px"><h4>Speaker Classifier Telemetry (CAM++)</h4><div id="v-tel-body" class="perfstat">—</div></div>
+          <div class="perfcard" style="margin-bottom:8px">
+            <h4>Live Volume Chart (all heard speakers · max 7)</h4>
+            <canvas id="voices-chart" width="840" height="150" style="width:100%;height:150px"></canvas>
+            <div id="voices-legend" style="display:flex;gap:12px;flex-wrap:wrap;font-size:11px;margin-top:4px"></div>
+          </div>
+          <div class="perfgrid" style="grid-template-columns:1.2fr 1fr">
+            <div class="perfcard"><h4>Room Roster (up to 7 speakers)</h4><div id="v-roster"></div></div>
+            <div class="perfcard"><h4>Recent Gate &amp; Wake Decisions</h4><div id="v-events" style="max-height:300px;overflow:auto;font-size:11px"></div></div>
+          </div>
+        </div>
+      </section>
+      <section id="view-sysinfo" class="hidden">
+        <div class="phead"><h2 id="sysinfo-title">System Inspector</h2><span class="pill">read-only</span><span class="grow"></span>
+          <button class="btn" type="button" onclick="loadSysinfo('prompts')">Prompts</button>
+          <button class="btn" type="button" onclick="loadSysinfo('context')">Context</button>
+          <button class="btn" type="button" onclick="loadSysinfo('skills')">Skills</button>
+          <button class="btn" type="button" onclick="loadSysinfo('tools')">Tools</button>
+        </div>
+        <div class="pbody" id="sysinfo-body"></div>
+      </section>
+      <section id="view-skills" class="hidden">
+        <div class="phead"><h2>Skills</h2><span class="pill" id="skills-sub"></span><span class="pill" style="color:var(--ok)">live · skills/*.md</span></div>
+        <div class="pbody" id="skills-body"></div>
+      </section>
+      <section id="view-mcp" class="hidden">
+        <div class="phead"><h2>MCP servers</h2><span class="pill" id="mcp-sub"></span><span class="pill warn">connect/disconnect planned — R14</span></div>
+        <div class="pbody" id="mcp-body"></div>
+      </section>
+      <section id="view-thinking" class="hidden">
+        <div class="phead"><h2>Thinking</h2><span class="pill num" id="thinking-count">0</span></div>
+        <div class="pbody" id="thinking-body"></div>
+      </section>
+      <section id="view-settings" class="hidden">
+        <div class="phead"><h2>Settings</h2><span class="grow"></span><button class="btn primary" id="btn-save-settings">Save</button></div>
+        <div class="pbody" id="settings-body"></div>
+      </section>
+    </main>
+    <div id="divider" title="drag to resize the panes"></div>
+    <aside class="inspector" id="inspector">
+      <div class="panes" id="panes">
+        <div class="pane" id="pane-pipeline"><h4>pipeline ▸ vad · asr · llm · tts</h4><div class="pcontent" id="tab-pipeline"></div></div>
+        <div class="pane" id="pane-trace"><h4>reasoning trace · agent thoughts</h4><div class="pcontent" id="tab-trace"></div></div>
+        <div class="pane" id="pane-timeline"><h4>engine event log</h4><div class="pcontent" id="tab-timeline2"></div></div>
+        <div class="pane" id="pane-status"><h4>status · in progress</h4><div class="pcontent" id="tab-status"></div></div>
+        <div class="pane wide" id="pane-agents"><h4>agents · change model + thinking · chain of thought · chat</h4><div class="pcontent" id="tab-agents"></div></div>
+        <div class="pane wide" id="pane-workflow"><h4>workflow · live</h4><div class="pcontent tree" id="tab-workflow"></div></div>
+        <div class="pane wide" id="pane-voices"><h4 style="display:flex;align-items:center">voices · wake master &amp; top 5<span class="grow"></span><button class="btn" type="button" style="font-size:9px;padding:1px 6px" onclick="setView('voices')">Full dashboard →</button></h4><div class="pcontent" id="tab-voices"></div></div>
+        <div class="pane wide" id="pane-mindmap"><h4>mind map · hierarchical tree</h4><div class="pcontent tree" id="tab-mindmap"></div></div>
+      </div>
+    </aside>
+  </div>
+  <footer class="statusbar">
+    <span class="meter" title="microphone level"><i id="level-fill"></i></span><select id="mic-device" title="input device" style="max-width:160px;font-size:10px"></select>
+    <canvas id="voice-wave" width="150" height="22"></canvas>
+    <span class="loading-pill" id="loading-wrap"><span class="dot-square" id="loading-sq" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span id="status-text">connecting…</span></span>
+    <span class="grow"></span>
+    <span class="pill num" id="pill-likes">0 likes</span>
+    <span class="pill num" id="pill-cpu">cpu —%</span>
+    <span class="pill num" id="pill-ram">ram —</span>
+    <span class="pill" id="pill-net">net —</span>
+    <span class="pill num" id="pill-temp" title="SoC / CPU temperature (Pi / supported Windows)">temp —</span>
+    <span class="pill num" id="pill-mem">— MB</span>
+    <span class="pill" id="pill-mic">mic off</span>
+  </footer>
+</div>
+<script>
+'use strict';
+/* Deploy stamp: when the served build differs from the one this window loaded,
+   reload once - stale windows silently ran old JavaScript (the "broken buttons"). */
+const BUILD = 'sonj4-v1';
+try {
+  const seen = localStorage.getItem('me3.build');
+  if (seen && seen !== BUILD){ localStorage.setItem('me3.build', BUILD); location.reload(); }
+  else { localStorage.setItem('me3.build', BUILD); }
+} catch (err) {}
+const $ = (id) => document.getElementById(id);
+/* Append children, flattening arrays. A list builder hands back an array, and appending an
+   array to the DOM stringifies it - that is where "[object HTMLDivElement]" came from. */
+const putKids = (parent, kids) => {
+  for (const k of kids){
+    if (k === null || k === undefined || k === false) continue;
+    if (Array.isArray(k)){ putKids(parent, k); continue; }
+    parent.append(k.nodeType ? k : document.createTextNode(String(k)));
+  }
+};
+const setKids = (parent, ...kids) => { parent.replaceChildren(); putKids(parent, kids); };
+function el(tag, attrs){
+  const n = document.createElement(tag);
+  if (attrs) for (const [k, v] of Object.entries(attrs)){
+    if (k === 'class') n.className = v; else if (k === 'text') n.textContent = v;
+    else if (k.startsWith('on')) n.addEventListener(k.slice(2).toLowerCase(), v);
+    else if (v !== null && v !== undefined) n.setAttribute(k, v);
+  }
+  for (let i = 2; i < arguments.length; i++) putKids(n, [arguments[i]]);
+  return n;
+}
+const msFmt = (v) => (v === null || v === undefined || Number.isNaN(Number(v))) ? '—' : Math.round(Number(v)) + ' ms';
+const api = async (path, body) => {
+  const opts = body ? {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)} : {};
+  try { const r = await fetch(path, opts); const t = r.headers.get('content-type') || ''; return t.includes('json') ? await r.json() : await r.text(); }
+  catch (err) { return {ok:false, error:'unreachable: ' + path}; }
+};
+let state = {}, mapData = null, view = 'dashboard';
+let sources = [];
+const selectedSourceNames = new Set();
+let likeSessionKey = '';
+let likedTurns = {};
+
+function syncLikeSession(s){
+  const nextKey = String(s.session_dir || 'session');
+  if (nextKey === likeSessionKey) return;
+  likeSessionKey = nextKey;
+  try {
+    const saved = JSON.parse(localStorage.getItem('me3.likes:' + likeSessionKey) || '{}');
+    likedTurns = saved && typeof saved === 'object' && !Array.isArray(saved) ? saved : {};
+  } catch (err) { likedTurns = {}; }
+}
+function turnKey(t, index){
+  return String(t.id !== undefined ? t.id : index) + ':' + String(t.ts || '') + ':' + String(t.source || '');
+}
+function updateLikesCount(turns){
+  const count = turns.reduce((n, t, i) => n + (likedTurns[turnKey(t, i)] ? 1 : 0), 0);
+  $('pill-likes').textContent = count + (count === 1 ? ' like' : ' likes');
+}
+function toggleLike(key, button, turns){
+  const liked = !likedTurns[key];
+  if (liked) likedTurns[key] = true; else delete likedTurns[key];
+  button.classList.toggle('liked', liked);
+  button.setAttribute('aria-pressed', String(liked));
+  button.textContent = '♥ ' + (liked ? 'Liked' : 'Like');
+  try { localStorage.setItem('me3.likes:' + likeSessionKey, JSON.stringify(likedTurns)); } catch (err) {}
+  updateLikesCount(turns);
+}
+
+function speakerWord(s){
+  if (s.speaking || s.status === 'speaking') return 'assistant speaking';
+  if (s.status === 'thinking') return 'thinking';
+  if (s.recording && s.mode === 'continuous') return 'listening';
+  if (s.recording) return 'capturing (ptt)';
+  return 'idle';
+}
+function toneOf(w){ return w === 'thinking' ? 'warn' : (w.indexOf('speaking') >= 0 || w === 'listening') ? 'ok' : ''; }
+
+/* speaker waveform */
+const wave = {levels:[], tones:[], span:80, timer:null};
+function drawWave(){
+  const c = $('voice-wave'); if (!c) return;
+  const g = c.getContext('2d'), w = c.width, h = c.height, mid = h/2;
+  g.clearRect(0,0,w,h);
+  g.strokeStyle = 'rgba(128,128,128,.3)'; g.beginPath(); g.moveTo(0,mid); g.lineTo(w,mid); g.stroke();
+  const n = wave.levels.length, bw = w / wave.span;
+  for (let i = 0; i < n; i++){
+    const v = Math.min(1, wave.levels[i]*5), bh = Math.max(1.5, v*(h-4)/2);
+    g.fillStyle = wave.tones[i]; g.fillRect(w-(n-i)*bw, mid-bh, Math.max(1.5, bw-1), bh*2);
+  }
+}
+function toneNow(s){ return (s.speaking || s.status==='speaking') ? 'var(--ok)' : s.recording ? 'var(--accent)' : s.status==='thinking' ? 'var(--warn)' : 'rgba(128,128,128,.4)'; }
+function renderWaveAndHeader(s){
+  if (!s || s.ok === false) return;
+  wave.levels.push(Number(s.level)||0); wave.tones.push(toneNow(s));
+  if (wave.levels.length > wave.span){ wave.levels.shift(); wave.tones.shift(); }
+  drawWave();
+  $('level-fill').style.width = Math.max(0, Math.min(100, (s.level||0)*500)) + '%';
+  const w = speakerWord(s); $('pill-speaker').textContent = w; $('pill-speaker').className = 'pill ' + toneOf(w);
+  $('pill-mem').textContent = Math.round(s.memory_mb||0) + ' MB';
+  $('pill-mic').textContent = 'mic ' + (s.mode||'off');
+  const wg = (s.settings || {}).wake_gate;
+  const bw = $('btn-wake');
+  if (bw){ bw.textContent = 'wake: ' + (wg ? 'on' : 'off'); bw.className = 'pill wake' + (wg ? ' on' : ''); }
+  const micMode = String(s.mode||'off');
+  $('btn-mic').textContent = micMode === 'ptt' ? '■ Send' : '🎤';
+  $('btn-mic').title = micMode === 'ptt' ? 'click to stop and send' : 'push to talk: click, speak, click to send';
+  $('btn-listen').textContent = micMode === 'continuous' ? '■ Listening' : '⏵ Listen';
+}
+
+/* transcript with inline tool cards */
+function toolCard(t){
+  const ok = t.ok !== false;
+  const args = t.arguments ? JSON.stringify(t.arguments) : '';
+  const res = String(t.result || '').slice(0, 400);
+  return el('details', {class:'tool'},
+    el('summary', {}, el('span', {class:'nm', text:t.name || 'tool'}),
+      el('span', {text:args ? ' ' + args.slice(0,60) : ''}),
+      el('span', {class:'st ' + (ok?'ok':'fail'), text:(ok?'✓ ':'✗ ') + msFmt(t.seconds)})),
+    el('div', {class:'bd', text:res || '(no result text)'}));
+}
+/* the engine's thinking entries up to a turn timestamp: the per-reply chain of thought */
+function cotUpTo(ts){
+  const rows = [];
+  for (const th of (state.thinking || [])){
+    if (!ts || String(th.ts || '') <= ts) rows.push(th);
+  }
+  return rows.slice(-12);
+}
+const openThinks = new Set();
+const openTools = new Set();
+let lastTxSig = '';
+let lastRenderedTurnCount = 0;
+let pendingSend = null;
+let forceScrollNext = false;
+function renderTranscript(s){
+  const box = $('transcript');
+  if (!box) return;
+  const turns = s.turns || [];
+  const live = s.live_turn;
+  if (pendingSend){
+    const matched = turns.length > pendingSend.baseTurnCount ||
+      Boolean(live && live.user_text) ||
+      (Date.now() - pendingSend.sentAt) > 15000;
+    if (matched) pendingSend = null;
+  }
+  const liveUser = live ? String(live.user_text || '') : (pendingSend ? pendingSend.text : '');
+  const livePartial = live ? String(live.partial || '') : '';
+  const liveSpeaking = Boolean(live && live.speaking);
+  const lastTurn = turns.length ? turns[turns.length - 1] : null;
+  const lastId = lastTurn ? (lastTurn.id + ':' + (lastTurn.user_text||'').length + ':' + (lastTurn.assistant_text||'').length) : 0;
+  const txSig = [turns.length, lastId, liveUser.length, liveUser.slice(-20), livePartial.length, liveSpeaking ? 1 : 0, pendingSend ? 1 : 0, s.recording ? 1 : 0, s.status, s.session_id || ''].join(':');
+  if (txSig === lastTxSig) return;
+  lastTxSig = txSig;
+  syncLikeSession(s);
+  updateLikesCount(turns);
+  const grew = turns.length > lastRenderedTurnCount;
+  lastRenderedTurnCount = turns.length;
+  const nearBottom = (box.scrollHeight - box.scrollTop - box.clientHeight) < 160;
+  const shouldScroll = forceScrollNext || grew || nearBottom || Boolean(pendingSend);
+  forceScrollNext = false;
+  setKids(box);
+  for (const [turnIndex, t] of turns.entries()){
+    const who = t.source === 'mic' ? 'you (mic)' : 'you';
+    const userText = t.user_text || t.text || '';
+    const agentText = t.assistant_text || '';
+    const key = turnKey(t, turnIndex), liked = Boolean(likedTurns[key]);
+    /* your bubble on the right (skip for Front-initiated task/Doctor announcements) */
+    if (userText){
+      const urow = el('div', {class:'trow user'},
+        el('span', {class:'meta', text:who + ' · ' + (t.ts || '')}),
+        el('div', {class:'bub' + (t.error ? ' error' : ''), text:userText}));
+      urow.append(el('button', {class:'btn reaction' + (liked ? ' liked' : ''), type:'button', 'aria-pressed':String(liked), text:'♥ ' + (liked ? 'Liked' : 'Like'), onclick:(event) => toggleLike(key, event.currentTarget, turns)}));
+      box.append(urow);
+    }
+    /* the agent's bubble on the left: reply + tools + latency chip + its chain of thought */
+    if (agentText || (t.tools || []).length || t.timings || t.error){
+      const tm = t.timings || {};
+      const lat = 'asr ' + Math.round(tm.asr_ms || 0) + ' · llm ' + Math.round(tm.llm_ms || 0) +
+        ' · tts ' + Math.round(tm.tts_ms || 0) + ' · total ' + Math.round(tm.total_ms || 0) + ' ms' +
+        (Number(tm.filler_ms) > 0 ? ' · ack ' + Math.round(tm.filler_ms) + ' ms' : '');
+      const arow = el('div', {class:'trow agent'},
+        el('span', {class:'meta', text:'agent · ' + (t.model || '') + ' · ' + (t.ts || '')}),
+        el('div', {class:'bub agentb' + (t.error ? ' error' : ''), text:agentText || (t.error ? '(turn failed)' : '(completed)')}));
+      if ((t.tools || []).length){
+        const wrap = el('div', {});
+        for (const [ti, tc] of t.tools.entries()){
+          const td = toolCard(tc);
+          const tkey = key + ':t' + ti;
+          if (openTools.has(tkey)) td.open = true;
+          td.ontoggle = () => { if (td.open) openTools.add(tkey); else openTools.delete(tkey); };
+          wrap.append(td);
+        }
+        arow.append(wrap);
+      }
+      arow.append(el('span', {class:'latchip', text:lat}));
+      const cot = (Array.isArray(t.thinking) && t.thinking.length) ? t.thinking : cotUpTo(t.ts);
+      if (cot.length){
+        const thDet = el('details', {class:'think'},
+          el('summary', {text:'chain of thought ▸ ' + cot.length}),
+          el('div', {class:'bd'}, cot.map(th => el('div', {class:'thline'},
+            el('span', {class:'ts', text:th.ts || ''}),
+            el('span', {class:'k-' + String(th.kind || 'think'), text:th.msg || String(th)})))));
+        if (openThinks.has(key)) thDet.open = true;
+        thDet.ontoggle = () => { if (thDet.open) openThinks.add(key); else openThinks.delete(key); };
+        arow.append(thDet);
+      }
+      box.append(arow);
+    }
+  }
+  /* live turn: user speech transcribes live as they talk, then agent reply types out */
+  if (pendingSend || (live && (live.user_text || live.partial || s.status === 'thinking' || s.status === 'transcribing'))){
+    const speakingUser = Boolean(live && live.speaking) && !(live && live.partial) && s.status !== 'thinking' && !pendingSend;
+    box.append(el('div', {class:'trow user'},
+      el('span', {class:'meta', text: speakingUser ? 'you (speaking…) · now' : 'you · now'}),
+      el('div', {class:'bub', text: (liveUser || '') + (speakingUser ? ' ▍' : '')})));
+    if (!speakingUser){
+      const thinkingSq = el('span', {class:'dot-square active', 'aria-hidden':'true'}, el('i'), el('i'), el('i'), el('i'));
+      const partialText = live && live.partial ? String(live.partial) : '';
+      const abub = el('div', {class:'bub agentb'});
+      if (partialText){
+        abub.append(document.createTextNode(partialText + ' ▍'));
+      } else {
+        abub.append(el('span', {class:'think-inline'}, thinkingSq, document.createTextNode('thinking…')));
+      }
+      box.append(el('div', {class:'trow agent'},
+        el('span', {class:'meta', text:'agent · thinking…'}),
+        abub));
+    }
+  }
+  if (shouldScroll){
+    requestAnimationFrame(() => { box.scrollTop = box.scrollHeight; });
+  }
+}
+
+/* inspector: six compact panes (font 8), all live */
+function renderInspector(s){
+  const cfg = s.agents || {};
+  const status = String(s.status || 'idle');
+  const speaking = Boolean(s.speaking) || status === 'speaking';
+  const turns = s.turns || [];
+  const last = turns.length ? (turns[turns.length - 1].timings || {}) : {};
+  const modelShort = String((s.settings || {}).model || '').split('/').pop();
+
+  /* pane 1 — pipeline: the full stage set, 4 visible lines, scrollable */
+  const wg = Boolean((s.settings || {}).wake_gate);
+  const stages = [
+    {k:'1 mic', on: Boolean(s.recording) || Number(s.level || 0) > 0.02,
+     d: s.recording ? 'capturing' : 'listening', lt:'level ' + Number(s.level || 0).toFixed(3)},
+    {k:'2 wake gate', on: Boolean(s.recording) && wg, d: wg ? 'armed (say Nova)' : 'off', lt:'mode ' + (s.mode || 'off')},
+    {k:'3 VAD', on: Number(s.level || 0) > 0.02, d: Number(s.level || 0) > 0.02 ? 'speech' : 'silence', lt:'threshold ' + ((s.settings || {}).vad_threshold || '-')},
+    {k:'4 ASR', on: status === 'transcribing', d: status === 'transcribing' ? 'transcribing' : 'idle', lt:'asr ' + Math.round(last.asr_ms || 0) + ' ms'},
+    {k:'5 classifier', on: Boolean((s.classifier || {}).last), d: ((s.classifier || {}).last || {}).route || 'front', lt: Number((((s.classifier || {}).last || {}).latency_ms) || 0).toFixed(2) + ' ms (+10% bias)'},
+    {k:'6 LLM + tools', on: status === 'thinking', d: status === 'thinking' ? 'reasoning' : 'idle', lt:'llm ' + Math.round(last.llm_ms || 0) + ' ms · ' + modelShort},
+    {k:'7 TTS · mcp', on: speaking, d: speaking ? 'synthesising' : 'idle', lt:'tts ' + Math.round(last.tts_ms || 0) + ' ms'},
+    {k:'8 speaker', on: speaking, d: speaking ? 'playing' : 'idle', lt:'first audio ' + Math.round(last.ttfa_ms || 0) + ' ms · ack ' + Math.round(last.filler_ms || 0) + ' ms'}];
+  setKids($('tab-pipeline'), stages.map(x => el('div', {class:'pv' + (x.on ? ' on' : '')},
+    el('span', {class:'k', text:x.k}), el('span', {class:'st', text:x.d}), el('span', {class:'lt', text:x.lt}))));
+
+  /* pane 2 — reasoning trace: ONLY agent thoughts, newest first (#5) */
+  const thoughts = (s.thinking || []).slice(-24);
+  const thoughtRows = [];
+  for (let i = thoughts.length - 1; i >= 0; i--) thoughtRows.push(thoughts[i]);
+  setKids($('tab-trace'), thoughtRows.map(th => el('div', {class:'thline'},
+    el('span', {class:'ts', text:th.ts}), el('span', {text:th.msg}))));
+
+  /* pane 3 — engine event log (NOT the reasoning trace): newest first (#5) */
+  const events = (s.events || []).slice(-24);
+  const eventRows = [];
+  for (let i = events.length - 1; i >= 0; i--){
+    const ev = events[i];
+    const isObj = (typeof ev === 'object' && ev !== null);
+    const msg = isObj ? String(ev.msg || ev.text || ev.event || JSON.stringify(ev)) : String(ev);
+    const ts = isObj ? String(ev.ts || ev.time || '') : '';
+    eventRows.push(el('div', {class:'thline'}, el('span', {class:'ts', text:ts.slice(0, 8)}), el('span', {text:msg.slice(0, 140)})));
+  }
+  setKids($('tab-timeline2'), eventRows);
+
+  /* pane 3.5 — status: ONLY in-progress work; finished items move to the event log */
+  const statuses = s.statuses || [];
+  setKids($('tab-status'), statuses.length
+    ? statuses.map(x => el('div', {class:'pv on'},
+        el('span', {class:'k', text:String(x.role || 'task')}),
+        el('span', {class:'st', text:String(x.label || '')}),
+        el('span', {class:'lt', text:String(x.state || 'running') + ' · ' + Math.round(Number(x.seconds || 0)) + 's'})))
+    : [el('div', {class:'sub', text:'nothing in progress — completed work lands in the engine event log'})]);
+
+  /* pane 4 — agents: model + thinking controls, per-agent CoT, direct chat */
+  renderAgentsPane(s, status, speaking);
+
+  /* pane 5 — workflow tree, live active highlighting from real pane/task state */
+  const panes = s.pi_panes || {};
+  const activeByRole = {};
+  for (const a of (s.agents_active || [])) activeByRole[a.role || a.name] = a.state || 'idle';
+  const paneBusy = (r) => {
+    const pst = String((panes[r] || {}).status || 'idle');
+    return pst !== 'idle' && pst !== 'ready' && pst !== 'stopped';
+  };
+  const backState = paneBusy('back') ? String(panes.back.status) : (activeByRole.back && activeByRole.back !== 'idle' ? activeByRole.back : 'idle');
+  const resState = paneBusy('researcher') ? String(panes.researcher.status) : 'idle';
+  const critState = paneBusy('critic') ? String(panes.critic.status) : 'idle';
+  const sumState = paneBusy('summarizer') ? String(panes.summarizer.status) : 'idle';
+  const docState = paneBusy('doctor') ? String(panes.doctor.status) : (activeByRole.doctor && activeByRole.doctor !== 'idle' ? activeByRole.doctor : 'idle');
+  const toolN = Number(s.tools_running || 0);
+  const wlines = [
+    ['you', s.recording ? 'listening' : 'idle', Boolean(s.recording)],
+    ['└ front', speaking ? 'speaking' : (status === 'thinking' ? 'thinking' : 'idle'), speaking || status === 'thinking'],
+    ['  └ router', activeByRole.router || (status === 'thinking' ? 'routing' : 'idle'), status === 'thinking'],
+    ['    └ tools', toolN ? 'running x' + toolN : 'idle', Boolean(toolN)],
+    ['      └ back', backState, backState !== 'idle'],
+    ['      └ researcher', resState, resState !== 'idle'],
+    ['      └ critic', critState, critState !== 'idle'],
+    ['      └ summarizer', sumState, sumState !== 'idle'],
+    ['      └ doctor', docState, docState !== 'idle'],
+    ['        └ voice', speaking ? 'speaking' : 'idle', speaking]];
+  setKids($('tab-workflow'), wlines.map(x => {
+    const row = el('div', {class:x[2] ? 'on' : 'dim'});
+    row.append(el('span', {class:'dot' + (x[2] ? ((status === 'thinking' || speaking) ? ' busy' : ' on') : '')}));
+    row.append(document.createTextNode(x[0] + ' ─ ' + x[1]));
+    return row;
+  }));
+
+  /* pane 6 — mind map: hierarchical tree */
+  const m = mapData || {};
+  const mlines = [];
+  if (m.intent) mlines.push(['intent: ' + m.intent, false]);
+  if (Array.isArray(m.tools)) for (const x of m.tools) mlines.push(['  ↳ tool: ' + (typeof x === 'string' ? x : (x.name || '?')), false]);
+  if (!mlines.length){
+    mlines.push(['you', false], ['└ front', false], ['  └ router', false]);
+    for (const r of Object.keys(cfg)) mlines.push(['    ↳ ' + r + ' · ' + ((cfg[r] || {}).model || '—'), r === 'front' && status === 'thinking']);
+  }
+  setKids($('tab-mindmap'), mlines.map(x => el('div', {class:x[1] ? 'on' : 'dim', text:x[0]})));
+
+  /* pane 7 — Wake-word & Top-5 Voices Dashboard (#6-add) */
+  const vp = s.voices || {};
+  const vBox = $('tab-voices');
+  if (vBox){
+    const masterText = vp.master_label ? ('Master: ' + vp.master_label + ' (' + (vp.master_ttl_s || 0) + 's)') : 'Master: unlocked (any speaker)';
+    const tel = vp.telemetry || {};
+    const top5 = vp.top5 || [];
+    const nodes = [
+      el('div', {class:'row', style:'display:flex;align-items:center;gap:6px;margin-bottom:4px'},
+        el('b', {text:masterText, style:'font-size:10px'}),
+        el('span', {class:'grow'}),
+        vp.master_label ? el('button', {class:'btn', type:'button', style:'font-size:9px;padding:1px 6px', text:'Unlock', onclick:() => api('/api/voices/unlock', {})}) : null),
+      el('div', {class:'sub', style:'font-size:9px;margin-bottom:4px', text:'CAM++ RAM ' + (tel.mem_mb || 0) + ' MB · CPU ' + (tel.avg_embed_ms || 0) + ' ms/utt (' + (tel.cpu_pct_est || 0) + '%) · Net 0 KB/s (local)'}),
+    ];
+    for (const v of top5){
+      const pct = Math.min(100, Math.round((Number(v.last_rms) || 0) * 600));
+      const tag = (v.is_master ? ' ★' : '') + (v.is_talking ? ' 🎙' : '');
+      nodes.push(el('div', {class:'vbar-row'},
+        el('span', {style:'min-width:86px;color:' + (v.is_talking ? 'var(--ok)' : (v.is_master ? 'var(--accent)' : 'var(--dim)')), text:v.label + tag}),
+        el('span', {class:'vbar-track'}, el('i', {class:'vbar-fill', style:'width:' + pct + '%;background:' + (v.is_talking ? 'var(--ok)' : 'var(--accent)')})),
+        el('span', {style:'min-width:44px;text-align:right;color:var(--dim)', text:Math.round((v.last_sim||0)*100) + '% · ' + v.count})));
+    }
+    if (!top5.length) nodes.push(el('div', {class:'sub', text:'waiting for speech…'}));
+    setKids(vBox, nodes.filter(Boolean));
+  }
+}
+function buildRoundTable(roles){
+  /* one message, several agents answer in sequence (#7) */
+  const box = el('div', {class:'rtbox'});
+  box.append(el('b', {text:'round table — one message, many agents answer'}));
+  const picked = new Set(['researcher', 'critic']);
+  const chips = el('div', {class:'chips'});
+  for (const r of roles){
+    const c = el('span', {class:'chip agent' + (picked.has(r) ? ' on' : ''), text:r});
+    c.onclick = () => { if (picked.has(r)) picked.delete(r); else picked.add(r); c.classList.toggle('on', picked.has(r)); };
+    chips.append(c);
+  }
+  box.append(chips);
+  const row = el('div', {class:'srow'});
+  const inp = el('input', {id:'rt-msg', placeholder:'one message — every checked agent answers…', style:'flex:1;font-size:9px;padding:3px 6px'});
+  const btn = el('button', {class:'btn', style:'font-size:9px;padding:2px 8px', text:'Ask all'});
+  btn.onclick = async () => {
+    const q = (inp.value || '').trim(); if (!q) return;
+    inp.value = '';
+    const log = $('rt-log');
+    for (const role of picked){
+      const line = el('div', {}, el('b', {text:role + ' …'}));
+      log.prepend(line);
+      const r = await api('/api/ask_agent', {role, question:q, context:'round table discussion'});
+      const reply = String((r && r.reply) || 'no reply');
+      line.replaceWith(el('div', {}, el('b', {text:role + ': '}), document.createTextNode(reply)));
+    }
+  };
+  row.append(inp, btn);
+  box.append(row);
+  box.append(el('div', {class:'rtlog', id:'rt-log'}));
+  return box;
+}
+function renderAgentsPane(s, status, speaking){
+  const box = $('tab-agents'); if (!box) return;
+  const cfg = s.agents || {};
+  const sig = rosterSignature(s);
+  if (box.dataset.sig !== sig){
+    box.dataset.sig = sig;
+    const active = {};
+    for (const a of (s.agents_active || [])) active[a.role || a.name] = a.state || a.status || 'active';
+    const roles = Object.keys(cfg);
+    setKids(box,
+      buildRoundTable(roles),
+      roles.map(role => {
+      const entry = cfg[role] || {};
+      const modelSel = modelSelect(entry.model, 'model for ' + role);
+      modelSel.onchange = async () => { const r = await api('/api/set_role_model', {role, model:modelSel.value}); flashNote((r && r.message) || 'model updated'); };
+      const lv = String(entry.thinking || 'medium');
+      const thinkSel = el('select', {title:'thinking for ' + role}, THINK_LEVELS.map(x => el('option', {value:x, text:'think: ' + x, selected:x === lv ? '' : null})));
+      thinkSel.onchange = async () => { const r = await api('/api/set_role_thinking', {role, level:thinkSel.value}); flashNote((r && r.message) || 'thinking updated'); };
+      return el('div', {class:'agedit'},
+        el('div', {class:'rrow'},
+          el('div', {}, el('b', {text:role}), el('div', {class:'st', text:active[role] || 'idle'})),
+          modelSel, thinkSel),
+        el('div', {class:'desc', text:entry.description || 'no role description set'}),
+        el('div', {class:'cot', id:'cot-' + role}),
+        el('div', {class:'srow'},
+          el('input', {id:'msg-' + role, placeholder:'message ' + role + ' directly…', style:'flex:1;font-size:9px;padding:3px 6px'}),
+          el('button', {class:'btn', style:'font-size:9px;padding:2px 8px', text:'Ask', onclick:async () => {
+            const inp = $('msg-' + role); const q = (inp.value || '').trim(); if (!q) return;
+            inp.value = '';
+            const r = await api('/api/ask_agent', {role, question:q, context:'direct message from the Agents pane'});
+            flashNote(role + ' replied: ' + String((r && r.reply) || 'no reply').slice(0, 90));
+          }})));
+    }));
+  }
+  /* per-agent chain of thought refreshes every poll without rebuilding the selects */
+  for (const role of Object.keys(cfg)){
+    const node = $('cot-' + role); if (!node) continue;
+    const trace = (s.thinking || []).filter(th => String(th.msg || '').indexOf(role) >= 0 || th.kind === 'a2a').slice(-5);
+    setKids(node, trace.map(th => el('div', {text:'· ' + (th.ts || '') + ' [' + (th.kind || 'step') + '] ' + (th.msg || '')})));
+  }
+}
+function renderSources(){
+  const selectedCount = selectedSourceNames.size;
+  $('sources-sub').textContent = sources.length + (sources.length === 1 ? ' source' : ' sources') + ' · ' + selectedCount + ' selected';
+  setKids($('source-list'), sources.length ? sources.map(name => {
+    const checkbox = el('input', {type:'checkbox'});
+    checkbox.checked = selectedSourceNames.has(name);
+    checkbox.onchange = () => {
+      if (checkbox.checked) selectedSourceNames.add(name); else selectedSourceNames.delete(name);
+      renderSources();
+    };
+    return el('label', {class:'source-item'}, checkbox, el('span', {text:name}));
+  }) : [el('div', {class:'sub', text:'No sources yet — drop files above to add their names.'})]);
+}
+
+/* documentation view: whole manual + live summary, rendered offline (no CDN) */
+let docsTab = 'full', docsCache = null;
+async function loadDocs(){
+  if (!docsCache){ const r = await api('/api/docs'); docsCache = r || {}; }
+  renderDocs();
+}
+const MD_ALLOWED = new Set(['H2','H3','H4','H5','P','UL','OL','LI','CODE','PRE','B','TABLE','TR','TH','TD','HR','A','BR']);
+/* whitelist sanitizer: rebuild only allowed tags; links must be http(s); text stays text */
+function mdSanitize(src, dest){
+  for (const child of Array.from(src.childNodes)){
+    if (child.nodeType === 3){ dest.appendChild(document.createTextNode(child.textContent || '')); continue; }
+    if (child.nodeType !== 1) continue;
+    if (!MD_ALLOWED.has(child.tagName)){ mdSanitize(child, dest); continue; }
+    const node = document.createElement(child.tagName.toLowerCase());
+    if (child.tagName === 'A'){
+      const href = child.getAttribute('href') || '';
+      if (/^https?:\/\//i.test(href)){ node.setAttribute('href', href); node.setAttribute('target', '_blank'); node.setAttribute('rel', 'noopener'); }
+    }
+    mdSanitize(child, node);
+    dest.appendChild(node);
+  }
+}
+function renderDocs(){
+  const md = docsTab === 'summary' ? (docsCache.summary || '') : (docsCache.full || '');
+  const parsed = new DOMParser().parseFromString(mdToHtml(md), 'text/html');
+  const frag = document.createDocumentFragment();
+  mdSanitize(parsed.body, frag);
+  $('docs-body').replaceChildren(frag);
+  $('docs-tab-full').classList.toggle('on', docsTab === 'full');
+  $('docs-tab-summary').classList.toggle('on', docsTab === 'summary');
+}
+$('docs-tab-full').onclick = () => { docsTab = 'full'; renderDocs(); };
+$('docs-tab-summary').onclick = () => { docsTab = 'summary'; renderDocs(); };
+function escHtml(t){ return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function mdInline(t){
+  return escHtml(t)
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+}
+function mdToHtml(md){
+  const lines = String(md || '').split(/\r?\n/); const out = [];
+  let inCode = false, list = null, table = false;
+  const closeList = () => { if (list){ out.push('</' + list + '>'); list = null; } };
+  const closeTable = () => { if (table){ out.push('</table>'); table = false; } };
+  for (const raw of lines){
+    if (raw.trim().startsWith('```')){ closeList(); closeTable(); inCode = !inCode; out.push(inCode ? '<pre>' : '</pre>'); continue; }
+    if (inCode){ out.push(escHtml(raw)); continue; }
+    const h = raw.match(/^(#{1,4})\s+(.*)$/);
+    if (h){ closeList(); closeTable(); const lv = Math.min(5, h[1].length + 1); out.push('<h' + lv + '>' + mdInline(h[2]) + '</h' + lv + '>'); continue; }
+    if (/^\s*[-*]\s+/.test(raw)){ closeTable(); if (list !== 'ul'){ closeList(); out.push('<ul>'); list = 'ul'; } out.push('<li>' + mdInline(raw.replace(/^\s*[-*]\s+/, '')) + '</li>'); continue; }
+    if (/^\s*\d+\.\s+/.test(raw)){ closeTable(); if (list !== 'ol'){ closeList(); out.push('<ol>'); list = 'ol'; } out.push('<li>' + mdInline(raw.replace(/^\s*\d+\.\s+/, '')) + '</li>'); continue; }
+    if (/^\s*\|.*\|\s*$/.test(raw)){
+      closeList();
+      const cells = raw.trim().replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+      if (cells.every(c => /^:?-{2,}:?$/.test(c))) continue;
+      if (!table){ out.push('<table>'); table = true; out.push('<tr>' + cells.map(c => '<th>' + mdInline(c) + '</th>').join('') + '</tr>'); }
+      else out.push('<tr>' + cells.map(c => '<td>' + mdInline(c) + '</td>').join('') + '</tr>');
+      continue;
+    }
+    closeList(); closeTable();
+    if (/^\s*(---+|\*\*\*+)\s*$/.test(raw)){ out.push('<hr>'); continue; }
+    if (raw.trim()) out.push('<p>' + mdInline(raw) + '</p>');
+  }
+  closeList(); closeTable(); if (inCode) out.push('</pre>');
+  return out.join('\n');
+}
+
+/* ---- Pipeline view: interactive VAD → ASR → LLM → TTS architecture ---- */
+let pipelineData = null;
+function fmtTok(n){ n = Number(n || 0); return n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n); }
+async function loadPipeline(){
+  pipelineData = await api('/api/pipeline');
+  await ensureCatalog();
+  renderPipeline();
+}
+function plSelect(id, options, current){
+  return el('select', {id}, options.map(o => el('option', {value:o, text:o, selected:o === current ? '' : null})));
+}
+function renderPipeline(){
+  const d = pipelineData || {}; const st = d.stages || {};
+  const body = $('pipeline-body'); if (!body) return;
+  const arrow = () => el('div', {class:'plarrow', text:'→'});
+  const card = (key, title, node) => el('div', {class:'plstage', id:'plstage-' + key},
+    el('h3', {text:title}),
+    el('div', {class:'plbackend', id:'pl-backend-' + key, text:(node || {}).backend || '—'}),
+    el('div', {class:'pllat', id:'pl-lat-' + key, text:'p50 ' + Math.round(Number((node || {}).p50_ms || 0)) + ' ms'}));
+  /* VAD */
+  const vad = st.vad || {}; const vo = vad.options || {};
+  const vadCard = card('vad', '1 · VAD', vad);
+  const vadCfg = el('div', {class:'plcfg'},
+    el('label', {}, 'threshold ', el('input', {id:'pl-vad-thr', type:'range', min:'0.1', max:'0.9', step:'0.05', value:String(vo.threshold || 0.5), style:'flex:1'})),
+    el('label', {}, 'min silence (s) ', el('input', {id:'pl-vad-sil', type:'range', min:'0.1', max:'1.0', step:'0.05', value:String(vo.min_silence || 0.25), style:'flex:1'})),
+    el('label', {}, el('input', {id:'pl-vad-smart', type:'checkbox', checked:vo.smart_turn ? '' : null}), ' smart turn (finish-thought detection)'),
+    el('div', {class:'pllat', text:vad.note || ''}),
+    el('button', {class:'btn', type:'button', text:'Apply VAD', onclick:async () => {
+      const r = await api('/api/settings', {vad_threshold:Number($('pl-vad-thr').value), vad_min_silence:Number($('pl-vad-sil').value), smart_turn:Boolean($('pl-vad-smart').checked)});
+      flashNote(r && r.ok === false ? 'VAD change failed' : 'VAD updated'); loadPipeline();
+    }}));
+  vadCard.append(vadCfg);
+  /* ASR */
+  const asr = st.asr || {};
+  const asrCard = card('asr', '2 · ASR', asr);
+  const asrCloudSel = plSelect('pl-asr-cloud', ['local'].concat((asr.cloud || []).map(c => c.id)), asr.active_cloud || 'local');
+  const asrKey = el('input', {id:'pl-asr-key', type:'password', placeholder:'API key (session only, never saved)'});
+  const asrCfg = el('div', {class:'plcfg'},
+    el('label', {}, 'local model'), plSelect('pl-asr-local', asr.local_backends || [], asr.active_local),
+    el('label', {}, 'backend'), asrCloudSel, asrKey,
+    el('button', {class:'btn', type:'button', text:'Apply ASR', onclick:async () => {
+      const cloud = $('pl-asr-cloud').value;
+      const patch = {asr_backend:$('pl-asr-local').value, asr_cloud:cloud === 'local' ? '' : cloud};
+      const key = $('pl-asr-key').value.trim();
+      if (key){ if (cloud === 'deepgram') patch.deepgram_api_key = key; if (cloud === 'openai') patch.openai_api_key = key; }
+      const r = await api('/api/settings', patch);
+      flashNote(r && r.ok === false ? 'ASR change failed' : 'ASR updated'); loadPipeline();
+    }}));
+  asrCard.append(asrCfg);
+  /* Decision Classifier (non-LLM, <100ms, +10% Front bias) */
+  const clf = st.classifier || {};
+  const clfCard = card('classifier', '2.5 · Decision Classifier', clf);
+  clfCard.append(el('div', {class:'plcfg'},
+    el('div', {class:'pllat', text:'Non-LLM · choices: front | back | doctor · +10% Front bias · <100ms'})));
+  /* LLM */
+  const llm = st.llm || {};
+  const llmCard = card('llm', '3 · LLM (Front)', llm);
+  const llmModel = modelSelect((state.settings || {}).model, 'Front conversation model');
+  llmModel.id = 'pl-llm-model';
+  const llmCfg = el('div', {class:'plcfg'},
+    el('label', {}, 'conversation model'), llmModel,
+    el('label', {}, 'chat thinking'), plSelect('pl-llm-think', ['off','low','medium','high'], llm.chat_thinking || 'off'),
+    el('button', {class:'btn', type:'button', text:'Apply LLM', onclick:async () => {
+      const r = await api('/api/settings', {model:$('pl-llm-model').value, chat_thinking:$('pl-llm-think').value});
+      flashNote(r && r.ok === false ? 'LLM change failed' : 'LLM updated'); loadPipeline();
+    }}));
+  llmCard.append(llmCfg);
+  /* TTS */
+  const tts = st.tts || {};
+  const ttsCard = card('tts', '4 · TTS', tts);
+  const ttsCloudSel = plSelect('pl-tts-cloud', ['local'].concat((tts.cloud || []).map(c => c.id)), tts.active_cloud || 'local');
+  const ttsKey = el('input', {id:'pl-tts-key', type:'password', placeholder:'API key (session only, never saved)'});
+  const ttsCfg = el('div', {class:'plcfg'},
+    el('label', {}, 'conversation voice'), plSelect('pl-tts-voice', tts.voices || [], tts.active_voice),
+    el('label', {}, 'backend'), ttsCloudSel, ttsKey,
+    el('button', {class:'btn', type:'button', text:'Apply TTS', onclick:async () => {
+      const cloud = $('pl-tts-cloud').value;
+      const patch = {tts_voice:$('pl-tts-voice').value, tts_cloud:cloud === 'local' ? '' : cloud};
+      const key = $('pl-tts-key').value.trim();
+      if (key){ if (cloud === 'openai') patch.openai_api_key = key; if (cloud === 'elevenlabs') patch.elevenlabs_api_key = key; }
+      const r = await api('/api/settings', patch);
+      flashNote(r && r.ok === false ? 'TTS change failed' : 'TTS updated'); loadPipeline();
+    }}));
+  ttsCard.append(ttsCfg);
+  setKids(body, vadCard, arrow(), asrCard, arrow(), clfCard, arrow(), llmCard, arrow(), ttsCard);
+  updatePipelineBadges(d);
+}
+function updatePipelineBadges(d){
+  const st = (d || {}).stages || {};
+  for (const key of ['vad','asr','classifier','llm','tts']){
+    const node = st[key] || {};
+    const b = $('pl-backend-' + key); if (b) b.textContent = node.backend || '—';
+    const l = $('pl-lat-' + key);
+    if (l && key !== 'vad'){ const msVal = key === 'classifier' ? Number(node.p50_ms || 0).toFixed(2) : String(Math.round(Number(node.p50_ms || 0))); l.textContent = msVal + ' ms'; }
+  }
+  const e2e = $('pipeline-e2e'); if (e2e) e2e.textContent = 'e2e p50 ' + Math.round(Number((d || {}).e2e_p50_ms || 0)) + ' ms';
+  const ack = $('pipeline-ack'); if (ack) ack.textContent = 'ack p50 ' + Math.round(Number((d || {}).ack_p50_ms || 0)) + ' ms';
+}
+async function updatePipelineLive(){
+  if (view !== 'pipeline') return;
+  const d = await api('/api/pipeline');
+  if (d) updatePipelineBadges(d);
+}
+/* ---- Performance view: live per-stage charts + session quality ---- */
+function drawChart(id, values, color){
+  const c = $(id); if (!c) return;
+  const g = c.getContext('2d'); const w = c.width, h = c.height;
+  g.clearRect(0, 0, w, h);
+  const vals = values.filter(v => Number(v) > 0);
+  if (!vals.length){ g.fillStyle = 'rgba(128,128,128,.6)'; g.font = '10px sans-serif'; g.fillText('no data yet this session', 10, h / 2); return; }
+  const max = Math.max.apply(null, vals) * 1.15;
+  g.strokeStyle = 'rgba(128,128,128,.25)'; g.lineWidth = 1;
+  for (let i = 1; i <= 3; i++){ const y = h - (h - 14) * i / 4; g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); }
+  const n = values.length; const bw = Math.max(2, (w - 8) / Math.max(n, 20));
+  g.fillStyle = color;
+  values.forEach((v, i) => {
+    const bh = Math.max(1, (Number(v) / max) * (h - 16));
+    g.globalAlpha = Number(v) > 0 ? 0.9 : 0.15;
+    g.fillRect(4 + i * bw, h - 4 - bh, Math.max(1.5, bw - 1.5), bh);
+  });
+  g.globalAlpha = 1;
+  g.fillStyle = 'rgba(200,200,200,.85)'; g.font = '9px sans-serif';
+  g.fillText(Math.round(max) + ' ms', 4, 10);
+  g.fillText('last ' + n + ' turns', w - 78, 10);
+}
+function qualityCells(q){
+  const cells = [
+    ['turns', q.turns, ''],
+    ['interruptions', q.interruptions, Number(q.interruptions) > 0 ? 'warn' : ''],
+    ['incomplete tasks', q.incomplete_tasks, Number(q.incomplete_tasks) > 0 ? 'bad' : ''],
+    ['errors', q.errors, Number(q.errors) > 0 ? 'bad' : ''],
+    ['clarifications', q.clarifications, ''],
+    ['echo drops', q.echo_drops, ''],
+  ];
+  return cells.map(x => el('div', {class:'qcell ' + x[2]}, el('b', {text:String(x[1] || 0)}), el('span', {text:x[0]})));
+}
+async function renderPerformance(s){
+  const q = (s || state || {}).quality || {};
+  setKids($('perf-quality'), qualityCells(q));
+  const elu = await api('/api/elevenlabs/usage');
+  const elb = $('el-credit-body');
+  if (elb){
+    elb.replaceChildren();
+    if (elu && elu.ok){
+      const pct = Number(elu.percent_used || 0); const score = Number(elu.credit_score || 0);
+      const reset = elu.reset_unix ? new Date(elu.reset_unix*1000).toLocaleDateString() : '—';
+      const row = el('div', {style:'display:flex;gap:14px;flex-wrap:wrap;align-items:center'},
+        el('span', {class:'pill'+(pct>90?' warn':''), text:'credit score '+score+'%'}),
+        el('span', {text:(elu.character_count||0).toLocaleString()+' / '+(elu.character_limit||0).toLocaleString()+' chars used'}),
+        el('span', {text:(elu.remaining||0).toLocaleString()+' remaining'}),
+        el('span', {text:'tier: '+(elu.tier||'—')}),
+        el('span', {text:'resets '+reset}),
+        el('span', {text:'this session: '+(elu.session_chars||0).toLocaleString()+' chars'}));
+      const meter = el('div', {class:'meter', style:'margin-top:6px;height:8px'},
+        el('i', {style:'width:'+Math.min(100,pct)+'%;background:'+(pct>90?'#f87171':'#34d399')}));
+      elb.append(row, meter);
+    } else { elb.textContent = (elu && elu.error) ? elu.error : 'no ElevenLabs key'; }
+  }
+  const turns = ((s || state || {}).turns || []).filter(t => t.source === 'mic' || t.source === 'text').slice(-40);
+  const series = k => turns.map(t => Number((t.timings || {})[k] || 0));
+  drawChart('chart-asr', series('asr_ms'), 'rgba(96,165,250,.9)');
+  drawChart('chart-llm', series('first_token_ms'), 'rgba(251,191,36,.9)');
+  drawChart('chart-ttfa', series('ttfa_ms'), 'rgba(52,211,153,.9)');
+  drawChart('chart-e2e', series('e2e_ms'), 'rgba(244,114,182,.9)');
+  const pt = $('perf-turns'); if (pt) pt.textContent = turns.length + ' chat turns';
+  const [lat, dist, rev] = await Promise.all([
+    api('/api/latency'),
+    api('/api/performance/distribution'),
+    api('/api/performance/review'),
+  ]);
+  const rEl = $('perf-review-body');
+  if (rEl && rev){
+    rEl.replaceChildren(
+      el('div', {text: rev.summary || 'No turns yet.'}),
+      ...(rev.findings || []).map(f => el('div', {class:'sub', style:'margin-top:3px', text:'• ' + f}))
+    );
+  }
+  const bEl = $('perf-blocks');
+  if (bEl && dist && Array.isArray(dist.reply_blocks)){
+    const blocks = dist.reply_blocks.slice(-8);
+    bEl.replaceChildren(...(blocks.length ? blocks.map(b => {
+      const tot = Math.max(1, Number(b.total_ms || 1));
+      const seg = (ms, col, lbl) => {
+        const w = Math.max(0, (Number(ms || 0) / tot) * 100);
+        return w > 0 ? el('span', {style:'width:'+w+'%;background:'+col, title:lbl+': '+Math.round(ms)+' ms'}) : null;
+      };
+      return el('div', {class:'lblock-row'},
+        el('span', {style:'min-width:130px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap', text:'#'+b.id+' '+b.user}),
+        el('div', {class:'lblock-bar'}, seg(b.asr_ms,'#60a5fa','ASR'), seg(b.ttft_ms,'#fbbf24','LLM TTFT'), seg(b.llm_gen_ms,'#f97316','LLM gen'), seg(b.tts_ms,'#34d399','TTS')).filter ? null : el('div', {class:'lblock-bar'}, ...[seg(b.asr_ms,'#60a5fa','ASR'), seg(b.ttft_ms,'#fbbf24','LLM TTFT'), seg(b.llm_gen_ms,'#f97316','LLM gen'), seg(b.tts_ms,'#34d399','TTS')].filter(Boolean)),
+        el('span', {style:'min-width:95px;text-align:right;font-size:10px;color:var(--dim)', text:Math.round(tot)+'ms ('+b.bottleneck+')'}));
+    }) : [el('div', {class:'sub', text:'No reply blocks recorded yet.'})]));
+  }
+  const dEl = $('perf-dist');
+  if (dEl && dist && Array.isArray(dist.features)){
+    const hdr = el('div', {class:'lblock-row', style:'font-weight:600;border-bottom:1px solid var(--line);padding-bottom:3px'},
+      el('span', {style:'flex:2', text:'Feature'}),
+      el('span', {style:'flex:1;text-align:right', text:'RAM (MB)'}),
+      el('span', {style:'flex:1;text-align:right', text:'Avg ms / CPU%'}),
+      el('span', {style:'flex:1;text-align:right', text:'Mode'}));
+    const rows = dist.features.map(f => el('div', {class:'lblock-row'},
+      el('span', {style:'flex:2', text:f.name}),
+      el('span', {style:'flex:1;text-align:right', text:String(f.mem_mb || 0)}),
+      el('span', {style:'flex:1;text-align:right', text:(f.avg_ms ? f.avg_ms+' ms' : '') + (f.cpu_pct !== undefined ? ' '+f.cpu_pct+'%' : '') || '—'}),
+      el('span', {style:'flex:1;text-align:right;color:var(--dim)', text:f.kind || ''})));
+    const tot = el('div', {class:'sub', style:'margin-top:6px', text:'Total app footprint: ' + (dist.total_app_rss_mb || 0) + ' MB (Python ' + (dist.python_rss_mb || 0) + ' MB + Pi panes ' + (dist.pi_panes_rss_mb || 0) + ' MB)'});
+    dEl.replaceChildren(hdr, ...rows, tot);
+  }
+  const fEl = $('perf-funnel');
+  if (fEl && dist){
+    const gf = dist.gate_funnel || {};
+    const snr = dist.snr_info || {};
+    const hd = dist.pi_headroom || {};
+    const fRow = el('div', {style:'display:flex;gap:12px;flex-wrap:wrap'},
+      el('span', {text:'VAD segments: ' + (gf.vad_segments || 0)}),
+      el('span', {text:'Wake allowed: ' + (gf.wake_allowed || 0)}),
+      el('span', {text:'Wake blocked: ' + (gf.wake_blocked || 0)}),
+      el('span', {text:'Ask skipped: ' + (gf.ask_dropped || 0)}),
+      el('span', {text:'Echo drops: ' + (gf.echo_dropped || 0)}),
+      el('span', {text:'Barge rejected: ' + (gf.barge_rejected || 0)}),
+      el('span', {style:'color:' + ((gf.cut_offs||0)>0 ? 'var(--warn)' : 'var(--ok)'), text:'Cut-offs: ' + (gf.cut_offs || 0)}),
+      el('span', {text:'Recoveries: ' + (gf.recoveries || 0)}));
+    const sRow = el('div', {class:'sub', style:'margin-top:5px'},
+      el('span', {text:'Room noise floor: ' + (snr.noise_floor || 0) + ' · Last SNR: ' + (snr.snr_ratio || 0) + 'x · Avg speed: ' + (dist.avg_tok_per_s || 0) + ' tok/s · RAM free: ' + (hd.ram_free_gb || 0) + ' GB · Disk free: ' + (hd.disk_free_gb || 0) + ' GB' + ((hd.warnings||[]).length ? ' · ⚠ ' + hd.warnings.join(', ') : '')}));
+    fEl.replaceChildren(fRow, sRow);
+  }
+  const scEl = $('perf-scorecard');
+  if (scEl && dist){
+    const sc = dist.model_scorecard || [];
+    const liveNodes = sc.length ? sc.map(m => el('div', {class:'lblock-row'},
+      el('span', {style:'flex:2', text:m.model}),
+      el('span', {style:'flex:1;text-align:right', text:m.turns + ' turns'}),
+      el('span', {style:'flex:1;text-align:right', text:'TTFT ' + m.avg_ttft_ms + ' ms'}),
+      el('span', {style:'flex:1;text-align:right', text:(m.avg_tok_s || 0) + ' tok/s'})))
+      : [el('div', {class:'sub', text:'No live model timings yet this session.'})];
+    const refTitle = el('div', {class:'sub', style:'margin-top:8px;font-weight:600', text:'Reference Benchmarks (Front / Specialist planning):'});
+    const refRows = [
+      ['github-copilot/gpt-5.4-nano', '~0.4-0.9s', '~140-180 tok/s', '$0.10/$0.40 ($0.18 w.avg) · Copilot $0'],
+      ['cohere/north-mini-code:free', '1.39s (meas)', '~80-110 tok/s', '$0.00 (free, tools ✓)'],
+      ['nvidia/nemotron-3.5-super-vl:free', '1.92s (meas)', '~70-90 tok/s', '$0.00 (free, tools ✓)'],
+      ['deepseek/deepseek-v4.1-flash / V3', '~1.2-2.0s', '~60-90 tok/s', '$0.32/$0.89 ($0.46 w.avg)'],
+      ['github-copilot/gpt-6-luna', '~2.5-6s (med)', '~45-70 tok/s', 'Frontier reasoning · Copilot $0'],
+    ].map(r => el('div', {class:'lblock-row', style:'color:var(--dim)'},
+      el('span', {style:'flex:2', text:r[0]}),
+      el('span', {style:'flex:1;text-align:right', text:r[1]}),
+      el('span', {style:'flex:1;text-align:right', text:r[2]}),
+      el('span', {style:'flex:1.6;text-align:right', text:r[3]})));
+    scEl.replaceChildren(...liveNodes, refTitle, ...refRows);
+  }
+  const stages = (lat || {}).stages || {};
+  const rows = ['| stage | p50 ms | p95 ms | max ms | n |', '| --- | ---: | ---: | ---: | ---: |'];
+  for (const k of ['asr_ms','first_token_ms','ttfa_ms','e2e_ms','filler_ms','tts_ms','total_ms']){
+    const r = stages[k]; if (!r) continue;
+    rows.push('| ' + k + ' | ' + Math.round(r.p50 || 0) + ' | ' + Math.round(r.p95 || 0) + ' | ' + Math.round(r.max || 0) + ' | ' + (r.n || 0) + ' |');
+  }
+  const tbl = $('perf-table'); if (tbl) tbl.replaceChildren(); 
+  if (tbl){ const frag = document.createDocumentFragment(); const parsed = new DOMParser().parseFromString(mdToHtml(rows.join('\n')), 'text/html'); mdSanitize(parsed.body, frag); tbl.appendChild(frag); }
+  const stat = (id, k) => { const r = stages[k]; const node = $(id); if (node && r) node.textContent = 'p50 ' + Math.round(r.p50 || 0) + ' ms · p95 ' + Math.round(r.p95 || 0) + ' ms · target: ack <300, chat first audio <1500'; };
+  stat('stat-asr', 'asr_ms'); stat('stat-llm', 'first_token_ms'); stat('stat-ttfa', 'ttfa_ms'); stat('stat-e2e', 'e2e_ms');
+}
+/* views */
+function setView(next){
+  view = next;
+  try { localStorage.setItem('me3.view', next); } catch (err) {}
+  document.querySelectorAll('.rail button[data-view]').forEach(b => b.classList.toggle('on', b.dataset.view === next));
+  for (const v of ['dashboard','chat','sessions','files','sources','agents','docs','pipeline','performance','voices','skills','mcp','thinking','settings','sysinfo']){
+    const sec = $('view-' + v); if (sec) sec.classList.toggle('hidden', v !== next);
+  }
+  $('inspector').classList.toggle('hidden', next !== 'chat');
+  if (next === 'chat'){
+    const box = $('transcript');
+    if (box) requestAnimationFrame(() => { box.scrollTop = box.scrollHeight; });
+  }
+  if (next === 'dashboard') renderDashboard(state);
+  if (next === 'sessions') loadSessions();
+  if (next === 'docs') loadDocs();
+  if (next === 'pipeline') loadPipeline();
+  if (next === 'performance') renderPerformance(state);
+  if (next === 'voices') renderVoices();
+  if (next === 'files') loadFiles();
+  if (next === 'sysinfo') loadSysinfo();
+  if (next === 'sources') renderSources();
+  if (next === 'agents') renderAgents();
+  if (next === 'skills') loadSkills();
+  if (next === 'mcp') loadMcp();
+  if (next === 'settings') renderSettings();
+}
+const VOICE_PALETTE = ['#34d399','#60a5fa','#fbbf24','#f472b6','#a78bfa','#fb7185','#2dd4bf'];
+function drawVoicesChart(speakers){
+  const cv = $('voices-chart'); if (!cv) return;
+  const ctx = cv.getContext('2d'); const W = cv.width, H = cv.height;
+  ctx.clearRect(0, 0, W, H);
+  ctx.strokeStyle = 'rgba(148,163,184,.16)'; ctx.lineWidth = 1;
+  for (let y = 30; y < H; y += 30){ ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+  const leg = $('voices-legend'); if (leg) leg.replaceChildren();
+  speakers.forEach((sp, idx) => {
+    const col = sp.ignored ? '#64748b' : VOICE_PALETTE[idx % VOICE_PALETTE.length];
+    const pts = sp.volumes || [];
+    if (pts.length){
+      ctx.strokeStyle = col; ctx.lineWidth = sp.is_master ? 2.5 : 1.6;
+      ctx.beginPath();
+      const step = W / Math.max(1, 35);
+      const off = Math.max(0, 36 - pts.length);
+      pts.forEach((v, i) => {
+        const x = (off + i) * step;
+        const y = H - 6 - Math.min(1, Number(v) * 6) * (H - 14);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+    }
+    if (leg){
+      leg.append(el('span', {style:'display:inline-flex;align-items:center;gap:4px'},
+        el('span', {style:'display:inline-block;width:9px;height:9px;border-radius:50%;background:'+col}),
+        el('span', {text:sp.label + (sp.is_master ? ' ★' : '') + (sp.ignored ? ' (blocked)' : '')})));
+    }
+  });
+}
+let editingSpeakerId = '';
+let lastRosterSig = '';
+let lastEventsSig = '';
+function voiceMsg(msg){ const m = $('v-action-msg'); if (m) m.textContent = msg; }
+async function renderVoices(force){
+  const d = await api('/api/voices?active=1');
+  if (!d) return;
+  const mp = $('v-master-pill');
+  if (mp){
+    const ms = d.masters || [];
+    const wgOn = Boolean((state.settings || {}).wake_gate);
+    let mpText = 'Open — any speaker (wake off)';
+    if (ms.length){
+      mpText = 'Masters (' + ms.length + '): ' + ms.map(m => m.label + ' ' + m.ttl_s + 's').join(', ');
+    } else if (wgOn){
+      mpText = 'Idle — say "Nova" to wake';
+    }
+    mp.textContent = mpText;
+    mp.className = 'pill ' + (ms.length ? 'ok' : '');
+  }
+  const vt = $('v-thresh');
+  if (vt && document.activeElement !== vt && d.match_threshold !== undefined){
+    vt.value = String(d.match_threshold);
+    if ($('v-thresh-val')) $('v-thresh-val').textContent = Number(d.match_threshold).toFixed(2);
+  }
+  const alwaysEl = $('v-bg-always');
+  const alwaysOn = Boolean((state.settings || {}).bg_voice_scan_always);
+  if (alwaysEl && document.activeElement !== alwaysEl) alwaysEl.checked = alwaysOn;
+  const bp = $('v-bg-pill');
+  if (bp) bp.textContent = d.bg_scanning_now ? 'bg scan: LIVE ●' : (alwaysOn ? 'bg scan: always on' : 'bg scan: view open');
+  const tel = d.telemetry || {};
+  const tb = $('v-tel-body');
+  if (tb) tb.textContent = 'Model RAM: ' + (tel.mem_mb || 0) + ' MB · Avg embed: ' + (tel.avg_embed_ms || 0) + ' ms · CPU est: ' + (tel.cpu_pct_est || 0) + '% · Net: 0 KB/s (local) · Noise floor: ' + (d.noise_floor || 0) + ' · Last SNR: ' + (d.snr_ratio || 0) + 'x';
+  const speakers = d.speakers || [];
+  drawVoicesChart(speakers);
+
+  const rBox = $('v-roster');
+  if (rBox){
+    const rosterSig = speakers.map(s => s.id + ':' + s.label + ':' + (s.ignored?1:0) + ':' + (s.is_master?1:0)).join('|') + '::' + editingSpeakerId;
+    if (!force && rosterSig === lastRosterSig){
+      // Update dynamic meters/badges IN PLACE — never destroy clicked buttons!
+      for (const sp of speakers){
+        const card = rBox.querySelector('[data-sid="' + sp.id + '"]');
+        if (!card) continue;
+        const pct = Math.min(100, Math.round((Number(sp.last_rms) || 0) * 600));
+        const fill = card.querySelector('.vbar-fill'); if (fill) fill.style.width = pct + '%';
+        const rTxt = card.querySelector('.v-rms'); if (rTxt) rTxt.textContent = 'rms ' + (sp.last_rms || 0).toFixed(3);
+        const sTxt = card.querySelector('.v-sim'); if (sTxt) sTxt.textContent = 'sim ' + Math.round((sp.last_sim||0)*100) + '% · ' + sp.count + 'x · ' + (sp.protos||1) + 'p';
+        const tPill = card.querySelector('.v-talking'); if (tPill) tPill.classList.toggle('hidden', !sp.is_talking);
+      }
+    } else if (!editingSpeakerId || force){
+      lastRosterSig = rosterSig;
+      const cards = speakers.length ? speakers.map((sp, idx) => {
+        const col = sp.ignored ? '#64748b' : VOICE_PALETTE[idx % VOICE_PALETTE.length];
+        const pct = Math.min(100, Math.round((Number(sp.last_rms) || 0) * 600));
+        const isEditing = editingSpeakerId === sp.id;
+        const renameBox = isEditing ? el('div', {class:'row', style:'display:flex;gap:4px;margin:6px 0'},
+          el('input', {id:'v-ren-' + sp.id, value:sp.label, style:'flex:1;padding:3px 6px;font-size:11px'}),
+          el('button', {class:'btn primary', type:'button', text:'Save', onclick:async () => {
+            const inp = $('v-ren-' + sp.id); const nm = inp ? inp.value.trim() : '';
+            if (nm){ await api('/api/voices/rename', {id: sp.id, label: nm}); voiceMsg('Renamed -> ' + nm); }
+            editingSpeakerId = ''; renderVoices(true);
+          }}),
+          el('button', {class:'btn', type:'button', text:'Cancel', onclick:() => { editingSpeakerId = ''; renderVoices(true); }})) : null;
+        const others = speakers.filter(o => o.id !== sp.id);
+        const mergeSel = others.length ? el('select', {id:'v-mrg-' + sp.id, style:'font-size:10px;padding:1px 4px'},
+          others.map(o => el('option', {value:o.id, text:'Merge -> ' + o.label}))) : null;
+        return el('div', {class:'card', 'data-sid':sp.id, style:'margin-bottom:6px;opacity:' + (sp.ignored ? '0.65' : '1')},
+          el('div', {class:'row', style:'display:flex;align-items:center;gap:6px;flex-wrap:wrap'},
+            el('span', {style:'width:9px;height:9px;border-radius:50%;background:'+col}),
+            el('b', {text:sp.label}),
+            sp.is_master ? el('span', {class:'pill ok', text:'★ Master'}) : null,
+            el('span', {class:'pill v-talking' + (sp.is_talking ? '' : ' hidden'), text:'🎙 Talking'}),
+            sp.ignored ? el('span', {class:'pill warn', text:'Blocked'}) : null,
+            el('span', {class:'grow'}),
+            el('span', {class:'sub v-sim', text:'sim ' + Math.round((sp.last_sim||0)*100) + '% · ' + sp.count + 'x · ' + (sp.protos||1) + 'p'})),
+          el('div', {class:'vbar-row', style:'margin:5px 0'},
+            el('span', {class:'vbar-track'}, el('i', {class:'vbar-fill', style:'width:'+pct+'%;background:'+col})),
+            el('span', {class:'v-rms', style:'min-width:54px;text-align:right;font-size:10px;color:var(--dim)', text:'rms ' + (sp.last_rms || 0).toFixed(3)})),
+          renameBox,
+          el('div', {class:'row', style:'display:flex;gap:4px;flex-wrap:wrap;align-items:center'},
+            el('button', {class:'btn', type:'button', text:'Rename', onclick:() => {
+              editingSpeakerId = sp.id; renderVoices(true);
+              const inp = $('v-ren-' + sp.id); if (inp){ inp.focus(); inp.select(); }
+            }}),
+            el('button', {class:'btn', type:'button', text: sp.ignored ? 'Unblock' : 'Ignore / Block', onclick:async () => {
+              await api('/api/voices/ignore', {id: sp.id, ignored: !sp.ignored});
+              voiceMsg((!sp.ignored ? 'Blocked ' : 'Unblocked ') + sp.label); renderVoices(true);
+            }}),
+            !sp.ignored ? el('button', {class:'btn', type:'button', text:'Make Master', onclick:async () => {
+              await api('/api/voices/master', {id: sp.id});
+              voiceMsg('Master -> ' + sp.label); renderVoices(true);
+            }}) : null,
+            sp.id !== 'owner' && !sp.ignored ? el('button', {class:'btn', type:'button', text:'Set Owner', onclick:async () => {
+              await api('/api/voices/promote', {id: sp.id});
+              voiceMsg('Saved ' + sp.label + ' as Owner'); renderVoices(true);
+            }}) : null,
+            mergeSel,
+            mergeSel ? el('button', {class:'btn', type:'button', text:'Merge', onclick:async () => {
+              const sel = $('v-mrg-' + sp.id); const dst = sel ? sel.value : '';
+              if (dst){ const r = await api('/api/voices/merge', {source_id: sp.id, target_id: dst}); voiceMsg(r && r.ok ? ('Merged into ' + r.into) : 'merge failed'); renderVoices(true); }
+            }}) : null));
+      }) : [el('div', {class:'sub', text:'No voices heard yet — turn Listen ON and speak (or let background talk happen).'})];
+      setKids(rBox, cards.filter(Boolean));
+    }
+  }
+  const eBox = $('v-events');
+  if (eBox){
+    const evs = d.events || [];
+    const eSig = evs.length + ':' + (evs.length ? evs[0].ts + evs[0].decision + evs[0].label : '');
+    if (force || eSig !== lastEventsSig){
+      lastEventsSig = eSig;
+      setKids(eBox, evs.length ? evs.map(e => el('div', {style:'padding:3px 0;border-bottom:1px dashed var(--line)'},
+        el('span', {style:'color:var(--dim);margin-right:6px', text:e.ts}),
+        el('b', {text:e.label + ' '}),
+        el('span', {class:'pill', style:'font-size:9px;margin-right:4px', text:e.decision}),
+        el('span', {style:'color:var(--dim)', text:'sim ' + e.sim + ' · ' + (e.detail || '')})))
+        : [el('div', {class:'sub', text:'No gate decisions yet.'})]);
+    }
+  }
+}
+async function loadSysinfo(tab){
+  const cur = tab || window._sysinfoTab || 'prompts';
+  window._sysinfoTab = cur;
+  const labels = {prompts:'System Prompts (read-only)', context:'Context File & Session Memory', skills:'Skill Directory', tools:'Available Tool Definitions'};
+  const tEl = $('sysinfo-title'); if (tEl) tEl.textContent = labels[cur] || 'System Inspector';
+  const body = $('sysinfo-body'); if (!body) return;
+  const data = await api('/api/introspection');
+  if (!data){ body.textContent = 'unavailable'; return; }
+  const nodes = [];
+  if (cur === 'prompts'){
+    for (const [role, txt] of Object.entries(data.system_prompts || {})){
+      nodes.push(el('div', {class:'card'},
+        el('div', {class:'row'}, el('b', {text:role.toUpperCase()}), el('span', {class:'pill', text:'read-only'})),
+        el('pre', {style:'white-space:pre-wrap;font-size:11px;color:var(--dim);margin:6px 0 0', text:txt})));
+    }
+  } else if (cur === 'context'){
+    const c = data.context || {};
+    nodes.push(el('div', {class:'card'},
+      el('div', {class:'row'}, el('b', {text:'MEMORY.md'}), el('span', {class:'sub', text:c.memory_file || ''})),
+      el('pre', {style:'white-space:pre-wrap;font-size:11px;margin:6px 0 0', text:c.memory_text || '(empty)'})));
+    nodes.push(el('div', {class:'card'},
+      el('div', {class:'row'}, el('b', {text:'Session Learned Profile'})),
+      el('pre', {style:'white-space:pre-wrap;font-size:11px;margin:6px 0 0', text:(c.session_profile || []).join('\n') || '(none yet)'})));
+  } else if (cur === 'skills'){
+    const sk = data.skills || {};
+    nodes.push(el('div', {class:'sub', style:'margin-bottom:8px', text:'Directory: ' + (sk.directory || '')}));
+    for (const it of (sk.items || [])){
+      nodes.push(el('div', {class:'card'},
+        el('div', {class:'row'}, el('b', {text:it.name}), el('span', {class:'sub', text:it.bytes + ' B'})),
+        el('pre', {style:'white-space:pre-wrap;font-size:11px;color:var(--dim);margin:6px 0 0', text:it.content || ''})));
+    }
+  } else if (cur === 'tools'){
+    for (const t of (data.tools || [])){
+      nodes.push(el('div', {class:'card'},
+        el('div', {class:'row'}, el('b', {text:t.name}), el('span', {class:'pill', text:t.source || ''})),
+        el('div', {class:'sub', text:t.description || ''}),
+        t.parameters ? el('pre', {style:'white-space:pre-wrap;font-size:10px;color:var(--dim);margin:4px 0 0', text:JSON.stringify(t.parameters)}) : null));
+    }
+  }
+  setKids(body, nodes.filter(Boolean));
+}
+async function loadSessions(){
+  const list = await api('/api/sessions');
+  const arr = Array.isArray(list) ? list : (list.sessions || []);
+  $('sessions-sub').textContent = arr.length + ' saved';
+  setKids($('sessions-body'), arr.length ? arr.map(x => {
+    const sid = x.id !== undefined ? x.id : (x.dir || '');
+    const preview = el('div', {class:'sub', style:'display:none;margin-top:6px;white-space:pre-wrap'});
+    return el('div', {class:'card'},
+      el('div', {class:'row', style:'display:flex;align-items:center;gap:6px'},
+        el('b', {text:x.title || x.first || sid || 'session'}),
+        x.current ? el('span', {class:'pill', text:'active'}) : null,
+        el('span', {class:'grow'}),
+        el('button', {class:'btn', type:'button', text:'Check', onclick:async () => {
+          if (preview.style.display === 'block'){ preview.style.display = 'none'; return; }
+          const r = await api('/api/session/inspect', {id: sid});
+          const lines = (r.turns || []).slice(-6).map(t => (t.user_text || '') + ' -> ' + (t.assistant_text || '').slice(0,80));
+          preview.textContent = (r.turn_count || 0) + ' turns · artifacts: ' + ((r.artifacts || []).join(', ') || 'none') + '\n' + lines.join('\n');
+          preview.style.display = 'block';
+        }}),
+        el('button', {class:'btn primary', type:'button', text:'Continue', onclick:() => loadSession(x)}),
+        !x.current ? el('button', {class:'btn danger', type:'button', text:'Delete', onclick:async () => {
+          const r = await api('/api/session/delete', {id: sid});
+          if (r && r.ok) loadSessions(); else flashNote('delete failed: ' + (r && r.error || 'unknown'));
+        }}) : null),
+      el('div', {class:'sub', text:(x.turns !== undefined ? x.turns + ' turns · ' : '') + sid}),
+      preview);
+  })
+    : [el('div', {class:'sub', text:'no saved sessions yet'})]);
+}
+async function loadSession(x){
+  const sid = x.id !== undefined ? x.id : (x.dir || '');
+  const r = await api('/api/session/load', {id: sid});
+  if (r && r.ok !== false){
+    pendingSend = null;
+    lastTxSig = '';
+    forceScrollNext = true;
+    setView('chat');
+    await poll();
+    const box = $('transcript');
+    if (box) requestAnimationFrame(() => { box.scrollTop = box.scrollHeight; });
+  }
+}
+async function loadFiles(){
+  const f = await api('/api/files');
+  const folders = f.folders || [], files = f.files || [];
+  $('files-sub').textContent = folders.length + ' folders · ' + files.length + ' files';
+  setKids($('files-body'),
+    folders.length ? folders.map(x => el('div', {class:'card'}, el('div', {class:'row'}, el('b', {text:typeof x === 'string' ? x : (x.path||'folder')})))) : [],
+    files.length ? el('div', {class:'card'}, files.slice(0, 400).map(x => {
+      const p = typeof x === 'string' ? x : (x.path || x.name || '');
+      return el('div', {class:'node', style:'cursor:pointer', onclick:() => { $('input').value = 'Please read ' + p + ' and summarize it.'; setView('chat'); $('input').focus(); }}, el('b', {text:p.split(/[\\/]/).pop()}), ' — ' + p);
+    })) : [el('div', {class:'sub', text:'no readable files — grant a folder above'})]);
+}
+async function loadSkills(){
+  const r = await api('/api/skills');
+  const arr = r.skills || [];
+  $('skills-sub').textContent = arr.length + ' skills';
+  setKids($('skills-body'), arr.length ? arr.map(sk => el('details', {class:'tool', style:'margin-bottom:8px'},
+    el('summary', {}, el('span', {class:'nm', text:sk.title || sk.name})),
+    el('div', {class:'bd'},
+      el('div', {style:'font-family:inherit;color:var(--text)', text:sk.description || ''}),
+      el('div', {class:'sub', text:sk.path}))))
+    : [el('div', {class:'sub', text:'no skills yet — drop .md files into sonj3/skills/'})]);
+}
+async function loadMcp(){
+  const r = await api('/api/mcp');
+  const arr = r.servers || [];
+  $('mcp-sub').textContent = arr.length + ' servers';
+  const cards = arr.map(sv => el('div', {class:'card'},
+    el('div', {class:'row'}, el('b', {text:sv.name || 'server'}), el('span', {class:'pill', text:sv.transport || '?'})),
+    el('div', {class:'sub', text:sv.status || ''}),
+    el('div', {class:'kv', text:'tools: ' + ((sv.tools||[]).join(', ') || '—')})));
+  if (r.registry) cards.push(el('div', {class:'sub', text:r.registry}));
+  setKids($('mcp-body'), cards.length ? cards : [el('div', {class:'sub', text:'no MCP servers found'})]);
+}
+function renderAgents(){
+  const cfg = state.agents || {};
+  const roles = Object.keys(cfg);
+  setKids($('agents-body'), roles.length ? roles.map(role => {
+    if (role === 'classifier' || cfg[role].kind === 'classifier'){
+      return el('div', {class:'card'},
+        el('div', {class:'row'}, el('b', {text:'classifier (non-LLM)'}), el('span', {class:'pill ok', text:'<100ms · +10% Front bias'})),
+        el('div', {class:'sub', text:cfg[role].description || 'Deterministic + ONNX decision classifier (no LLM)'}));
+    }
+    const sel = modelSelect(cfg[role].model, 'model for ' + role);
+    sel.id = 'agent-' + role;
+    return el('div', {class:'card'},
+      el('div', {class:'row'}, el('b', {text:role})),
+      sel,
+      el('input', {id:'agentfb-' + role, style:'width:100%;margin-top:6px', value:(cfg[role].fallbacks || '').join ? cfg[role].fallbacks.join(', ') : (cfg[role].fallbacks || '')}));
+  })
+    : [el('div', {class:'sub', text:'agents.json not loaded'})]);
+}
+function renderSettings(){
+  const s = state;
+  const voices = s.tts_voices || [];
+  const personav = voices.filter(v => v.indexOf('kokoro:') === 0);
+  const list = personav.length ? personav : ['Neural: kokoro:af_heart','Neural: kokoro:am_michael'];
+  const st = s.settings || {};
+  const sel = (id, label, cur, note) => el('div', {class:'card'},
+    el('div', {class:'row'}, el('b', {text:label})),
+    el('select', {id, style:'width:100%'}, list.map(v => el('option', {value:v, text:v, selected:v === cur ? '' : null}))),
+    el('div', {class:'sub', text:note}));
+  const ttsToggle = el('input', {id:'tts-enabled', type:'checkbox', style:'width:auto;margin-right:8px'});
+  ttsToggle.checked = st.tts_enabled !== false;
+  const echoToggle = el('input', {id:'echo-cancellation', type:'checkbox', style:'width:auto;margin-right:8px'});
+  echoToggle.checked = st.echo_cancellation !== false;
+  const convVoice = el('select', {id:'conv-voice', style:'width:100%'}, (s.tts_voices || []).map(v => el('option', {value:v, text:v, selected:v === st.tts_voice ? '' : null})));
+  const chatThink = el('select', {id:'chat-thinking'}, ['off','low','medium','high'].map(v => el('option', {value:v, text:v, selected:v === (st.chat_thinking || 'off') ? '' : null})));
+  const bargeStrict = el('select', {id:'barge-strictness'}, ['relaxed','normal','strict'].map(v => el('option', {value:v, text:v, selected:v === (st.barge_strictness || 'strict') ? '' : null})));
+  const wakeInt = el('input', {id:'wake-to-interrupt', type:'checkbox', style:'width:auto;margin-right:8px'});
+  wakeInt.checked = Boolean(st.wake_to_interrupt);
+  const vpOn = el('input', {id:'voiceprint-enabled', type:'checkbox', style:'width:auto;margin-right:8px'});
+  vpOn.checked = Boolean(st.voiceprint_enabled);
+  const vpBarge = el('input', {id:'voiceprint-barge', type:'checkbox', style:'width:auto;margin-right:8px'});
+  vpBarge.checked = Boolean(st.voiceprint_barge);
+  const askDetToggle = el('input', {id:'ask-detector', type:'checkbox', style:'width:auto;margin-right:8px'});
+  askDetToggle.checked = st.ask_detector !== false;
+  const wakeLockToggle = el('input', {id:'wake-speaker-lock', type:'checkbox', style:'width:auto;margin-right:8px'});
+  wakeLockToggle.checked = st.wake_speaker_lock !== false;
+  const idleWakeToggle = el('input', {id:'require-wake-when-idle', type:'checkbox', style:'width:auto;margin-right:8px'});
+  idleWakeToggle.checked = st.require_wake_when_idle !== false;
+  const localLlmToggle = el('input', {id:'allow-local-llm', type:'checkbox', style:'width:auto;margin-right:8px'});
+  localLlmToggle.checked = Boolean(st.allow_local_llm);
+  const annToggle = el('input', {id:'announce-task-completion', type:'checkbox', style:'width:auto;margin-right:8px'});
+  annToggle.checked = st.announce_task_completion !== false;
+  const elAmortToggle = el('input', {id:'elevenlabs-amortize-spend', type:'checkbox', style:'width:auto;margin-right:8px'});
+  elAmortToggle.checked = st.elevenlabs_amortize_spend !== false;
+  const paidToggle = el('input', {id:'paid-models-enabled', type:'checkbox', style:'width:auto;margin-right:8px'});
+  paidToggle.checked = Boolean(st.paid_models_enabled);
+  const frontPiToggle = el('input', {id:'front-uses-pi', type:'checkbox', style:'width:auto;margin-right:8px'});
+  frontPiToggle.checked = st.front_uses_pi !== false;
+  setKids($('settings-body'),
+    el('div', {class:'card'},
+      el('div', {class:'row'}, el('b', {text:'Learned this session'}),
+        el('button', {class:'btn', id:'btn-clear-profile', type:'button', text:'Clear'})),
+      el('div', {class:'sub', id:'session-profile', style:'white-space:pre-line',
+        text:((s.session_profile || []).length ? (s.session_profile || []).map(f => '• ' + f).join('\n') : 'nothing yet — Front learns your preferences as you talk')})),
+    el('div', {class:'card'},
+      el('div', {class:'row'}, el('b', {text:'Voice, Wake & Completion Behavior'})),
+      el('label', {class:'srow', style:'cursor:pointer;margin-top:4px'}, askDetToggle,
+        el('span', {text:'Ask-Detector — skip filler backchannels ("oh", "yeah") unless clarifying'})),
+      el('label', {class:'srow', style:'cursor:pointer;margin-top:4px'}, wakeLockToggle,
+        el('span', {text:'Multi-master wake lock — anyone who says "Nova" joins active masters (5 min idle timeout)'})),
+      el('label', {class:'srow', style:'cursor:pointer;margin-top:4px'}, idleWakeToggle,
+        el('span', {text:'Stay quiet when idle — after 5 min timeout, require "Nova" before replying'})),
+      el('label', {class:'srow', style:'cursor:pointer;margin-top:4px'}, localLlmToggle,
+        el('span', {text:'Allow local Ollama LLMs (keep OFF to save RAM)'})),
+      el('label', {class:'srow', style:'cursor:pointer;margin-top:4px'}, annToggle,
+        el('span', {text:'Auto-announce completed tasks — Front speaks completion iff idle & available'})),
+      el('label', {class:'srow', style:'cursor:pointer;margin-top:4px'}, elAmortToggle,
+        el('span', {text:'Include amortized ElevenLabs plan cost ($0.000125/char) in total spend'}))),
+    sel('nova-voice', 'Nova — female voice', st.nova_voice || list[0], 'default af_heart (warm)'),
+    sel('piattos-voice', 'Piattos — male voice', st.piattos_voice || (list[2] || list[list.length-1]), 'default am_michael (natural)'),
+    el('div', {class:'card'}, el('div', {class:'row'}, el('b', {text:'Stop words'})),
+      el('input', {id:'barge-triggers', style:'width:100%', value:(st.barge_triggers||[]).join(', ')}),
+      el('div', {class:'sub', text:'only these cut a reply mid-sentence; nova also means listen'})),
+    el('div', {class:'card'},
+      el('div', {class:'row'}, el('b', {text:'Audio, Models & Pi.dev Harness'})),
+      el('label', {class:'srow', style:'cursor:pointer;margin-top:6px'},
+        ttsToggle,
+        el('span', {text:'Enable voice audio output (TTS speaker)'})),
+      el('label', {class:'srow', style:'cursor:pointer;margin-top:6px'},
+        echoToggle,
+        el('span', {text:'Echo cancellation — stop the app hearing its own voice (' + (s.echo_engine || 'numpy-correlator') + ')'})),
+      el('div', {class:'srow', style:'margin-top:6px'}, el('span', {text:'Conversation voice', style:'font-size:10px;color:var(--dim);min-width:130px'}), convVoice),
+      el('div', {class:'srow'}, el('span', {text:'Chat thinking', style:'font-size:10px;color:var(--dim);min-width:130px'}), chatThink),
+      el('div', {class:'srow'}, el('span', {text:'Barge-in strictness', style:'font-size:10px;color:var(--dim);min-width:130px'}), bargeStrict),
+      el('label', {class:'srow', style:'cursor:pointer;margin-top:4px'}, wakeInt,
+        el('span', {text:'Wake-to-interrupt — only "Nova/Piattos" cuts a reply'})),
+      el('label', {class:'srow', style:'cursor:pointer;margin-top:4px'}, vpOn,
+        el('span', {text:'Voiceprint — only the enrolled owner starts turns (enroll below)'})),
+      el('label', {class:'srow', style:'cursor:pointer;margin-top:4px'}, vpBarge,
+        el('span', {text:'Voiceprint barge-in — only the owner may interrupt'})),
+      el('div', {class:'srow', style:'margin-top:4px'},
+        el('button', {class:'btn', id:'btn-enroll-voice', type:'button', text:'🎙 Enroll my voice (10 s)'}),
+        el('span', {class:'sub', id:'voiceprint-status', text:((s.voiceprint || {}).enrolled ? 'enrolled ✓' : 'not enrolled')})),
+      el('label', {class:'srow', style:'cursor:pointer;margin-top:6px'},
+        paidToggle,
+        el('span', {text:'Enable paid OpenRouter models (e.g. DeepSeek V4.1 Flash) — off by default'})),
+      el('label', {class:'srow', style:'cursor:pointer;margin-top:4px'},
+        frontPiToggle,
+        el('span', {text:'Run Front supervisor via live pi.dev terminal (github-copilot/gpt-6-luna)'}))));
+}
+function renderThinking(s){
+  const list = s.thinking || [];
+  $('thinking-count').textContent = list.length + ' steps';
+  setKids($('thinking-body'), list.map(th => el('div', {class:'thline'}, el('span', {class:'ts', text:th.ts}), el('span', {text:th.msg}))));
+}
+
+/* dashboard: one view that aggregates status, the live reasoning trace, the roster
+   (model + thinking changed inline) and the crew studio (builder, canvas, resources,
+   execution). Everything here reads the same /api/state the chat does. */
+const THINK_LEVELS = ['off','low','medium','high'];
+const CREW_TOOLS = ['get_time','set_timer','set_lights','get_weather','calculate','web_search','read_page','describe_image'];
+let studioRoles = new Set();
+let dashBuilt = false;
+function kv2(value, label){ return el('div', {class:'kv2'}, el('b', {text:String(value)}), el('span', {text:label})); }
+/* /api/state.models is {"ollama":[...],"openrouter":[...]}; the pickers want a flat list. */
+function modelList(s){
+  const m = (s && s.models) || {};
+  if (Array.isArray(m)) return m;
+  const out = [];
+  for (const key of Object.keys(m)) if (Array.isArray(m[key])) out.push(...m[key]);
+  return out;
+}
+/* The full catalogue (415 models) comes from /api/model_catalog once, not the poll:
+   grouped by provider/family and searchable, with free variants starred. */
+let modelCatalog = null;
+async function ensureCatalog(){
+  if (modelCatalog) return modelCatalog;
+  const r = await api('/api/model_catalog');
+  modelCatalog = (r && r.catalog) || [];
+  for (const id of ['db-roster', 'tab-tasks']){ const n = $(id); if (n) delete n.dataset.sig; }
+  return modelCatalog;
+}
+function groupedOptions(catalog, filter){
+  const f = String(filter || '').toLowerCase();
+  const groups = new Map();
+  for (const m of catalog){
+    if (f && !((m.id || '') + ' ' + (m.group || '') + ' ' + (m.provider || '')).toLowerCase().includes(f)) continue;
+    const key = m.provider === 'Ollama' ? 'Ollama' : m.provider + ' / ' + m.group;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(m);
+  }
+  const out = [];
+  for (const [label, items] of groups){
+    const og = document.createElement('optgroup');
+    og.label = label + '  ·  ' + items.length;
+    const paidOn = !!((state.settings || {}).paid_models_enabled);
+    for (const m of items){
+      const short = m.id.includes('/') ? m.id.split('/').slice(1).join('/') : m.id;
+      const paid = m.free === false;
+      og.append(el('option', {
+        value:m.id,
+        text:(m.free ? '★ ' : '') + short + (paid ? (paidOn ? '  ·  paid' : '  ·  paid (enable in Settings)') : ''),
+        disabled:(paid && !paidOn) ? '' : null}));
+    }
+    out.push(og);
+  }
+  return out;
+}
+function modelSelect(selected, title){
+  const sel = el('select', {style:'width:100%', title:title || ''});
+  const catalog = modelCatalog || [];
+  if (catalog.length){
+    const have = new Set(catalog.map(m => m.id));
+    const opts = groupedOptions(catalog, '');
+    if (selected && !have.has(selected)){
+      const og = document.createElement('optgroup');
+      og.label = 'current';
+      og.append(el('option', {value:selected, text:selected}));
+      opts.unshift(og);
+    }
+    sel.append(...opts);
+  } else {
+    sel.append(...modelList(state).map(mv => el('option', {value:mv, text:mv})));
+  }
+  if (selected) sel.value = selected;
+  return sel;
+}
+function traceRows(s, limit){
+  const rows = (s.thinking || []).slice(-(limit||80));
+  return rows.map((th, i) => el('div', {class:'t' + (i === rows.length-1 ? ' now' : '')},
+    el('span', {class:'k', text:th.kind || 'step'}),
+    el('span', {class:'ts', text:th.ts || ''}),
+    el('span', {class:'m', text:th.msg || ''})));
+}
+function renderTrace(s){
+  const box = $('db-trace'); if (!box) return;
+  const stick = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+  setKids(box, traceRows(s, 80),
+    String(s.status||'') === 'thinking'
+      ? el('div', {class:'t now'}, el('span',{class:'k',text:'…'}), el('span',{class:'ts',text:''}), el('span',{class:'m',text:'reasoning…'}))
+      : null);
+  if (stick) box.scrollTop = box.scrollHeight;
+}
+function flashNote(text){ const n = $('db-note'); if (n) n.textContent = text; }
+function rosterSignature(s){
+  const cfg = s.agents || {};
+  return Object.keys(cfg).map(r => r + ':' + ((cfg[r]||{}).model||'') + ':' + ((cfg[r]||{}).thinking||'')).join('|');
+}
+function rosterRows(s){
+  const cfg = s.agents || {};
+  const active = {}; for (const a of (s.agents_active||[])) active[a.role || a.name] = a.state || a.status || 'active';
+  return Object.keys(cfg).map(role => {
+    const entry = cfg[role] || {};
+    const modelSel = modelSelect(entry.model, 'model for ' + role);
+    modelSel.onchange = async () => { const r = await api('/api/set_role_model', {role, model:modelSel.value}); flashNote((r && r.message) || 'model updated'); };
+    const lv = String(entry.thinking || 'medium');
+    const thinkSel = el('select', {title:'thinking for ' + role}, THINK_LEVELS.map(x => el('option', {value:x, text:'think: ' + x, selected:x===lv?'':null})));
+    thinkSel.onchange = async () => { const r = await api('/api/set_role_thinking', {role, level:thinkSel.value}); flashNote((r && r.message) || 'thinking updated'); };
+    return el('div', {class:'rrow'},
+      el('div', {}, el('b', {text:role}), el('div', {class:'st', text:active[role] || 'idle'})),
+      modelSel, thinkSel);
+  });
+}
+function renderRosterInline(s){
+  const box = $('db-roster'); if (!box) return;
+  const sig = rosterSignature(s);
+  if (box.dataset.sig === sig) return;  /* never rebuild an open dropdown every poll */
+  box.dataset.sig = sig;
+  const rows = rosterRows(s);
+  setKids(box, rows.length ? rows : [el('div', {class:'sub', text:'no roles in agents.json'})]);
+}
+function renderStudio(s){
+  const cfg = s.agents || {}, tasks = s.tasks || [];
+  const tools = (s.tools||[]).length ? s.tools : CREW_TOOLS;
+  const roles = Object.keys(cfg);
+  const res = $('db-resources');
+  if (res) setKids(res,
+    el('h4', {text:'agents'}), roles.map(r => el('span', {class:'chip agent' + (studioRoles.has(r)?' on':''),
+      onclick:() => { if (studioRoles.has(r)) studioRoles.delete(r); else studioRoles.add(r); renderStudio(state); }}, r)),
+    el('h4', {text:'tasks'}), tasks.map(t => el('span', {class:'chip task', text:String(t.title||t.brief||t.id||'task').slice(0,26)})),
+    el('h4', {text:'tools'}), tools.map(t => el('span', {class:'chip tool', text:t})));
+  const canv = $('db-canvas');
+  if (canv) setKids(canv,
+    el('div', {class:'col'}, el('h4', {text:'agents (' + (studioRoles.size || roles.length) + ')'}),
+      (studioRoles.size ? [...studioRoles] : roles).map(r => el('div', {class:'node2 agent'}, el('b', {text:r}), el('div', {class:'st', text:((cfg[r]||{}).model||'')})))),
+    el('div', {class:'col'}, el('h4', {text:'tasks'}),
+      tasks.length ? tasks.map(t => el('div', {class:'node2 task'}, el('b', {text:String(t.title||t.brief||t.id||'task').slice(0,40)}), el('div', {class:'st', text:(t.state||'') + (t.model ? ' · ' + String(t.model).slice(0,24) : '')}))) : [el('div', {class:'st', text:'no tasks yet'})]),
+    el('div', {class:'col'}, el('h4', {text:'tools'}), tools.slice(0,10).map(t => el('div', {class:'node2 tool', text:t}))));
+  const tl = $('db-timeline');
+  if (tl){
+    const rows = (s.thinking||[]).slice(-40), newest = [];
+    for (let i = rows.length - 1; i >= 0; i--) newest.push(rows[i]);
+    setKids(tl, newest.map(th => el('div', {class:'tl'}, el('span', {class:'ts', text:th.ts||''}), el('span', {text:'[' + (th.kind||'step') + '] ' + (th.msg||'')}))));
+  }
+}
+let dirData = null;
+async function loadDir(){
+  const d = await api('/api/dir');
+  if (!d || d.ok === false) return;
+  dirData = d;
+  const p = $('db-dir-path'); if (p){ p.textContent = d.path || '…'; p.title = d.path || ''; }
+  const list = $('db-dir-list');
+  if (list) setKids(list, (d.entries||[]).map(x => el('div', {class:'d'},
+    el('span', {class:'n', text:x.name}),
+    el('span', {class:'s', text:x.dir ? 'dir' : (Math.round((x.size||0)/1024) + ' KB')}))));
+}
+function buildDashboard(body){
+  setKids(body,
+    el('div', {class:'dcard full'}, el('h3', {}, 'status', el('span', {class:'grow'}), el('span', {class:'st', id:'db-note'})),
+      el('div', {class:'kvs', id:'db-kvs'})),
+    el('div', {class:'dcard full'}, el('h3', {}, 'reasoning trace', el('span', {class:'grow'}), el('span', {class:'st', text:'live'})),
+      el('div', {class:'trace', id:'db-trace'})),
+    el('div', {class:'dcard full'}, el('h3', {}, 'agents — change model + thinking inline'),
+      el('div', {class:'role-inline', id:'db-roster'})),
+    el('div', {class:'dcard full'}, el('h3', {}, 'crew studio — agents → tasks → tools'),
+      el('div', {class:'studio'},
+        el('div', {class:'col'}, el('h4', {text:'AI thoughts — describe the crew'}),
+          el('textarea', {id:'db-brief', rows:'3', style:'width:100%;background:var(--bg2);color:var(--text);border:1px solid var(--line);border-radius:8px', placeholder:'e.g. research the top Raspberry Pi voice stacks, then critique and summarise'}),
+          el('div', {class:'srow'},
+            el('select', {id:'db-process'}, ['sequential','hierarchical'].map(x => el('option', {value:x, text:x}))),
+            el('button', {class:'btn primary', id:'db-build', text:'Build crew'}),
+            el('button', {class:'btn', id:'db-export', text:'Export'})),
+          el('div', {class:'sub', id:'db-build-note', text:'select agents from Resources, then Build'})),
+        el('div', {class:'col', style:'min-height:auto'}, el('h4', {text:'canvas'}), el('div', {class:'canvas', id:'db-canvas'})),
+        el('div', {class:'col'}, el('h4', {text:'resources'}), el('div', {id:'db-resources'})))),
+    el('div', {class:'dcard full'}, el('h3', {}, 'doctor — direct chat + repair'),
+      el('div', {class:'srow'},
+        el('input', {id:'db-doc-q', placeholder:'tell the doctor what is broken — it can diagnose and repair', style:'flex:1'}),
+        el('button', {class:'btn primary', id:'db-doc-send', text:'Ask doctor'})),
+      el('div', {class:'srow'},
+        el('button', {class:'btn', id:'db-doc-diag', text:'Run full diagnosis'}),
+        el('button', {class:'btn', id:'db-doc-fix', text:'Fix top finding'})),
+      el('div', {class:'rtlog', id:'db-doc-log'})),
+    el('div', {class:'dcard full'}, el('h3', {}, 'directories', el('span', {class:'grow'}), el('span', {class:'st', id:'db-dir-note'})),
+      el('div', {class:'srow'},
+        el('code', {id:'db-dir-path', text:'…'}),
+        el('button', {class:'btn', id:'db-dir-copy', text:'Copy path'}),
+        el('button', {class:'btn', id:'db-dir-refresh', text:'Refresh'}),
+        el('button', {class:'btn', id:'db-dir-files', text:'Open Files'})),
+      el('div', {class:'dir-list', id:'db-dir-list'})),
+    el('div', {class:'dcard full'}, el('h3', {}, 'execution — timeline + logs'),
+      el('div', {class:'timeline', id:'db-timeline'})));
+  $('db-build').onclick = async () => {
+    const brief = ($('db-brief').value || '').trim();
+    if (!brief){ $('db-build-note').textContent = 'describe the crew first'; return; }
+    $('db-build-note').textContent = 'starting crew…';
+    const r = await api('/api/crew', {brief, roles:[...studioRoles], process:$('db-process').value});
+    $('db-build-note').textContent = (r && r.message) || (r && r.ok ? 'crew started' : 'crew failed');
+  };
+  $('db-export').onclick = () => {
+    const blob = new Blob([JSON.stringify(state.agents||{}, null, 2)], {type:'application/json'});
+    const a = el('a', {href:URL.createObjectURL(blob), download:'agents.json'}); a.click();
+  };
+  $('db-dir-copy').onclick = async () => {
+    const path = (dirData && dirData.path) || '';
+    try { await navigator.clipboard.writeText(path); $('db-dir-note').textContent = 'path copied'; }
+    catch (err) { $('db-dir-note').textContent = path; }
+  };
+  $('db-dir-refresh').onclick = () => loadDir();
+  $('db-dir-files').onclick = () => setView('files');
+  $('db-doc-send').onclick = async () => {
+    const q = ($('db-doc-q').value || '').trim(); if (!q) return;
+    $('db-doc-q').value = '';
+    const log = $('db-doc-log');
+    log.prepend(el('div', {}, el('b', {text:'you: '}), document.createTextNode(q)));
+    const r = await api('/api/ask_agent', {role:'doctor', question:q, context:'app health chat on the dashboard'});
+    log.prepend(el('div', {}, el('b', {text:'doctor: '}), document.createTextNode(String((r && r.reply) || 'no reply'))));
+  };
+  $('db-doc-diag').onclick = async () => {
+    const r = await api('/api/diagnose', {scope:'all', agent:'doctor'});
+    $('db-doc-log').prepend(el('div', {}, el('b', {text:'diagnosis: '}), document.createTextNode(JSON.stringify(r).slice(0, 260))));
+  };
+  $('db-doc-fix').onclick = async () => {
+    const r = await api('/api/fix_now', {dry_run:false});
+    $('db-doc-log').prepend(el('div', {}, el('b', {text:'repair: '}), document.createTextNode(JSON.stringify(r).slice(0, 260))));
+  };
+  loadDir();
+}
+function renderDashboard(s){
+  const body = $('dashboard-body'); if (!body) return;
+  if (!dashBuilt){ buildDashboard(body); dashBuilt = true; }
+  const doc = s.doctor || {};
+  const docOk = doc.enabled === false ? 'doctor off' : (doc.kill_switch ? 'doctor paused' : (doc.last_run ? 'doctor ok' : 'doctor idle'));
+  const cwdPill = $('db-cwd');
+  if (cwdPill){ cwdPill.textContent = String(s.cwd||'').split(/[\\/]/).pop() || '…'; cwdPill.title = s.cwd || ''; }
+  $('db-tokens').textContent = Number(s.spend_tokens||0).toLocaleString() + ' tok';
+  $('db-spend').textContent = '$' + Number(s.spend_usd||0).toFixed(4);
+  const dp = $('db-doctor'); dp.textContent = docOk; dp.className = 'pill ' + ((doc.enabled === false || doc.kill_switch) ? 'warn' : 'ok');
+  const settings = s.settings || {};
+  setKids($('db-kvs'),
+    kv2(s.status||'idle', 'status'), kv2(settings.model||'—', 'model'),
+    kv2(Number(s.spend_tokens||0).toLocaleString(), 'tokens used'),
+    kv2('$' + Number(s.spend_usd||0).toFixed(4), 'spend'),
+    kv2(Math.round(s.memory_mb||0) + ' MB', 'memory'),
+    kv2((s.agents_active||[]).length + ' active', 'agents'),
+    kv2(String(s.session_dir||'').split(/[\\/]/).pop() || '—', 'session'));
+  renderTrace(s); renderRosterInline(s); renderStudio(s);
+}
+
+/* slash commands */
+const HELP = [
+  '/help — this list', '/tools — tool calls recorded this session',
+  '/sessions — open Sessions', '/files — open Files', '/agents — open Agents',
+  '/map — open Mind map', '/skills — skills status', '/mcp — MCP status',
+  '/model <name> — switch model', '/clear — reset the conversation', '/stop — stop listening'];
+function note(text){
+  $('transcript').append(el('div', {class:'trow assistant'}, el('div', {class:'bub', text:text})));
+  $('transcript').scrollTop = $('transcript').scrollHeight;
+}
+async function command(raw){
+  const parts = raw.slice(1).split(/\s+/), cmd = parts[0], arg = parts.slice(1).join(' ');
+  if (cmd === 'help') note(HELP.join('\n'));
+  else if (cmd === 'sessions') setView('sessions');
+  else if (cmd === 'files') setView('files');
+  else if (cmd === 'agents') setView('agents');
+  else if (cmd === 'skills') setView('skills');
+  else if (cmd === 'mcp') setView('mcp');
+  else if (cmd === 'map') { mapData = await api('/api/map'); setView('chat'); renderInspector(state); note('mind map refreshed'); }
+  else if (cmd === 'stop') { await api('/api/stop', {}); note('listening stopped'); }
+  else if (cmd === 'clear') { await api('/api/reset', {}); note('conversation cleared'); }
+  else if (cmd === 'think') setView('thinking');
+  else if (cmd === 'model'){ if (!arg){ note('usage: /model <name>'); return; } const r = await api('/api/settings', {model:arg}); note(r && r.ok === false ? 'failed: ' + (r.error||'?') : 'model set to ' + arg); }
+  else if (cmd === 'tools'){ const ts = []; for (const t of (state.turns||[])) for (const c of (t.tools||[])) ts.push(c.name + ' ' + (c.ok===false?'✗':'✓') + ' ' + msFmt(c.seconds)); note(ts.length ? ts.join('\n') : 'no tool calls yet'); }
+  else note('unknown command: ' + cmd + '\n' + HELP.join('\n'));
+}
+
+/* poll */
+let lastPaidFlag = null;
+function exportTranscript(){
+  const turns=(state&&state.turns)||[];
+  const lines=['# SONJ conversation - '+new Date().toISOString(),''];
+  for(const t of turns){ lines.push('## '+(t.role||'turn')); lines.push(String(t.text||t.content||t.message||'')); lines.push(''); }
+  const blob=new Blob([lines.join('\n')],{type:'text/markdown'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download='sonj-transcript-'+new Date().toISOString().replace(/[:.]/g,'-')+'.md';
+  document.body.append(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
+}
+function askDoctorAboutError(){
+  const err=(state&&state.error)||'unknown error';
+  api('/api/send',{text:'Doctor: diagnose this app error and suggest a fix: '+err});
+}
+let pollInFlight = false;
+let restartingEngine = false;
+function setBottomLoading(label, busy){
+  const wrap = $('loading-wrap'), sq = $('loading-sq'), st = $('status-text');
+  if (st) st.textContent = label;
+  if (sq) sq.classList.toggle('active', Boolean(busy));
+  if (wrap) wrap.classList.toggle('busy', Boolean(busy));
+}
+async function poll(){
+  if (pollInFlight) return;
+  pollInFlight = true;
+  try {
+    const s = await api('/api/state');
+    if (!s || s.ok === false){
+      setBottomLoading(restartingEngine ? 'restarting engine…' : 'reconnecting… (engine offline)', restartingEngine);
+      const lf0=$('level-fill'); if(lf0) lf0.style.width='0%';
+      return;
+    }
+    const prev = (state.turns||[]).length;
+    if ((s.turns||[]).length !== prev){
+      api('/api/map').then(m => { if (m && m.ok !== false) mapData = m; });
+    }
+    const paidNow = Boolean((s.settings || {}).paid_models_enabled);
+    if (lastPaidFlag !== null && paidNow !== lastPaidFlag){
+      for (const id of ['db-roster', 'tab-agents']) { const n = $(id); if (n) delete n.dataset.sig; }
+      const pop = $('model-pop'); if (pop) delete pop.dataset.ready;
+    }
+    lastPaidFlag = paidNow;
+    state = s;
+    const ps = $('pill-session');
+    if (ps){
+      ps.textContent = s.session_title || 'New Chat';
+      ps.title = s.session_id ? ('Session: ' + s.session_id) : (s.session_dir || '');
+    }
+    const cwdEl = $('chat-cwd'); if (cwdEl){ cwdEl.textContent = '📁 ' + (String(s.cwd||'').split(/[\\/]/).pop() || '…'); cwdEl.title = s.cwd || ''; }
+    $('pill-spend').textContent = '$' + Number(s.spend_usd||0).toFixed(4);
+    const sb = s.spend_breakdown || {};
+    $('pill-spend').title = 'LLM: $' + Number(sb.llm_usd||0).toFixed(4) + ' (' + (sb.llm_tokens||0) + ' tok) + ElevenLabs: $' + Number(sb.elevenlabs_usd||0).toFixed(4) + ' (' + (sb.elevenlabs_chars||0) + ' chars)';
+    const sh = s.system_health || {};
+    if ($('pill-cpu')) $('pill-cpu').textContent = 'cpu ' + Math.round(sh.cpu_pct || 0) + '%';
+    if ($('pill-ram')) $('pill-ram').textContent = 'ram ' + (sh.ram_used_gb || 0) + '/' + (sh.ram_total_gb || 0) + 'G (' + Math.round(sh.ram_pct || 0) + '%)';
+    if ($('pill-net')) $('pill-net').textContent = (sh.net_up ? 'net ok ' + Math.round(sh.net_kbps || 0) + 'K/s' : 'net offline');
+    if ($('pill-temp')) $('pill-temp').textContent = sh.temp_c !== null && sh.temp_c !== undefined ? ('temp ' + sh.temp_c + '°C') : 'temp —';
+    const dc = $('doc-confirm-banner');
+    if (dc){
+      const dp = s.doctor_pending;
+      dc.classList.toggle('hidden', !dp);
+      if (dp){
+        if ($('doc-confirm-text')) $('doc-confirm-text').textContent = 'Doctor change: ' + (dp.summary || dp.action);
+        const rem = Math.max(0, Math.ceil(Number(dp.remaining_s || 0)));
+        if ($('doc-confirm-timer')) $('doc-confirm-timer').textContent = rem + 's';
+        if ($('doc-confirm-sub')) $('doc-confirm-sub').textContent = 'Auto-confirming in ' + rem + 's unless you cancel.';
+      }
+    }
+    $('chat-status').textContent = s.status || 'idle';
+    const clfEl = $('chat-clf');
+    if (clfEl && s.classifier){
+      const cl = s.classifier.last;
+      clfEl.textContent = cl ? ('clf: ' + cl.route + ' · ' + Number(cl.latency_ms || 0).toFixed(2) + 'ms') : 'clf: ready (<100ms)';
+    }
+    const bp0 = $('chat-barge-pill');
+    if (bp0){
+      const wti = (s.settings || {}).wake_to_interrupt === true;
+      bp0.textContent = wti ? '🛡 interrupt: stop-word only' : '🎤 interrupt: natural';
+      bp0.title = wti ? 'Only stop words (stop/cancel/quiet/enough) interrupt the agent. CLICK to switch to NATURAL (any real speech interrupts).' : 'Any real speech interrupts the agent (its own echo is rejected). CLICK to switch to STOP-WORD only.';
+      bp0.className = 'pill ' + (wti ? '' : 'ok');
+    }
+    const activeTasks = (s.tasks || []).filter(t => t.state === 'running' || t.state === 'queued').length;
+    const isBusy = Boolean(restartingEngine || pendingSend || s.status === 'thinking' || s.status === 'transcribing' || s.status === 'speaking' || activeTasks > 0);
+    let loadMsg = s.error ? ('error: ' + String(s.error).slice(0,70))
+      : restartingEngine ? 'restarting engine…'
+      : (s.status === 'thinking' || pendingSend) ? 'thinking…'
+      : s.status === 'transcribing' ? 'transcribing…'
+      : s.status === 'speaking' ? 'speaking…'
+      : activeTasks > 0 ? ('working (' + activeTasks + ' task' + (activeTasks > 1 ? 's' : '') + ')…')
+      : (s.recording ? 'listening' : 'ready');
+    setBottomLoading(loadMsg, isBusy);
+    const eb = $('err-banner'); eb.textContent = s.error || ''; eb.classList.toggle('hidden', !s.error);
+    const ad=$('btn-ask-doctor'); if(ad) ad.classList.toggle('hidden', !s.error);
+    const lf=$('level-fill'); if(lf) lf.style.width = Math.min(100, (Number(s.level)||0)*500) + '%';
+    const bp=$('boot-pill'); if(bp && s.startup_check){ const sc=s.startup_check; bp.textContent='boot '+(sc.status||'OK'); bp.title=(sc.recent_errors||0)+' recent errors · '+(sc.checked_at||''); bp.classList.toggle('warn', sc.status!=='OK'); }
+    const md=$('mic-device'); if(md && s.devices && s.devices.input){ const sig=JSON.stringify(s.devices.input.map(d=>d.index))+':'+s.devices.input_index; if(md.dataset.sig!==sig){ md.dataset.sig=sig; md.innerHTML=''; for(const d of s.devices.input){ const o=document.createElement('option'); o.value=d.index; o.textContent=d.name; if(d.index===s.devices.input_index)o.selected=true; md.append(o); } } }
+    renderWaveAndHeader(s);
+    renderTranscript(s); renderInspector(s); renderThinking(s); renderLower(s); updateCountdown(s);
+    const cq = $('chat-quality');
+    if (cq && s.quality){ const q = s.quality; cq.textContent = '⚡' + (q.interruptions || 0) + ' · ⚠' + (q.incomplete_tasks || 0) + ' · ✗' + (q.errors || 0) + ' · ?' + (q.clarifications || 0); }
+    if (view === 'performance') renderPerformance(s);
+    if (view === 'voices') renderVoices();
+    if (view === 'pipeline') updatePipelineLive();
+    if (view === 'dashboard') renderDashboard(s);
+    const mb = $('btn-model'); const mname = ((s.settings||{}).model||'—'); if (mb.textContent !== 'model: ' + mname) mb.textContent = 'model: ' + mname;
+  } finally {
+    pollInFlight = false;
+  }
+}
+
+/* lower half: the community feed plus one terminal per agent role.
+   Each role pane mirrors that role's pi session: thinking, tool calls, output. */
+function lowerRoles(s){
+  const roles = Object.keys(s.agents || {}).filter(r => r !== 'classifier' && ((s.agents || {})[r] || {}).kind !== 'classifier');
+  for (const name of Object.keys(s.pi_panes || {})) if (!roles.includes(name)) roles.push(name);
+  return roles;
+}
+let expandedPane = '';
+let modalFilter = 'all';
+function openPaneModal(role){
+  expandedPane = role;
+  modalFilter = 'all';
+  const m = $('pane-modal');
+  if (m) m.classList.add('open');
+  renderPaneModal(state);
+}
+function closePaneModal(){
+  expandedPane = '';
+  const m = $('pane-modal');
+  if (m) m.classList.remove('open');
+}
+function renderPaneModal(s){
+  if (!expandedPane) return;
+  const title = $('pane-modal-title'), st = $('pane-modal-state'), body = $('pane-modal-body');
+  if (!body) return;
+  const foot = $('pane-modal-foot');
+  if (title) title.textContent = expandedPane === 'community' ? 'community · agents talking' : (expandedPane + ' · pi.dev terminal');
+  if (foot) foot.style.display = expandedPane === 'community' ? 'none' : 'flex';
+  const stick = body.scrollHeight - body.scrollTop - body.clientHeight < 60;
+  let rows = [];
+  if (expandedPane === 'community'){
+    if (st) st.textContent = 'feed';
+    rows = (s.thinking || []).filter(th => ['a2a','crew','gate','pi','fallback','think'].includes(String(th.kind || ''))).slice(-200)
+      .map(th => ({kind: String(th.kind || 'meta'), text: (th.ts || '') + ' [' + (th.kind || 'step') + '] ' + (th.msg || '')}));
+  } else {
+    const data = (s.pi_panes || {})[expandedPane] || {status:'idle', lines:[]};
+    if (st) st.textContent = data.status || 'idle';
+    rows = (data.lines || []).slice(-300);
+  }
+  const filtered = modalFilter === 'all' ? rows : rows.filter(r => {
+    if (modalFilter === 'think') return r.kind === 'think';
+    if (modalFilter === 'tool') return r.kind === 'tool' || r.kind === 'tool_result';
+    return r.kind === 'text' || r.kind === 'meta';
+  });
+  setKids(body, filtered.length
+    ? filtered.map(ln => el('div', {class:'mline k-' + String(ln.kind || 'meta'), text:ln.text}))
+    : [el('div', {class:'k-think', text:'no entries yet for this filter'})]);
+  if (stick) body.scrollTop = body.scrollHeight;
+}
+function renderLower(s){
+  const box = $('lower'); if (!box) return;
+  const feed = (s.thinking || []).filter(th => ['a2a','crew','gate','pi','fallback'].includes(String(th.kind || ''))).slice(-80);
+  const cbody = $('lbody-community');
+  if (cbody){
+    setKids(cbody, feed.length
+      ? feed.map(th => el('div', {class:'k-' + String(th.kind || 'meta')},
+          el('span', {text:(th.ts || '') + ' '}), el('span', {text:th.msg || ''})))
+      : [el('div', {class:'k-think', text:'no agent-to-agent traffic yet'})]);
+    cbody.scrollTop = cbody.scrollHeight;
+  }
+  const roles = lowerRoles(s);
+  const have = new Set(Array.from(box.querySelectorAll('.lpane[data-role]')).map(n => n.dataset.role));
+  for (const role of roles){
+    if (have.has(role)) continue;
+    box.append(el('div', {class:'lpane', 'data-role':role},
+      el('h4', {},
+        el('span', {text:role}),
+        el('span', {class:'pill', id:'lpane-state-' + role, text:'idle'}),
+        el('button', {class:'expbtn', type:'button', title:'Expand ' + role + ' terminal', text:'⤢', onclick:() => openPaneModal(role)})),
+      el('div', {class:'lbody', id:'lbody-' + role})));
+  }
+  for (const role of roles){
+    const data = (s.pi_panes || {})[role] || {status:'idle', lines:[]};
+    const st = $('lpane-state-' + role);
+    if (st) st.textContent = (data.status || 'idle') + (data.tokens ? ' · ' + fmtTok(data.tokens) + ' tok' : '');
+    const body = $('lbody-' + role); if (!body) continue;
+    const rows = (data.lines || []).slice(-140);
+    setKids(body, rows.length
+      ? rows.map(ln => el('div', {class:'k-' + String(ln.kind || 'meta'), text:ln.text}))
+      : [el('div', {class:'k-think', text:'idle — send a task via Front or Expand'})]);
+    body.scrollTop = body.scrollHeight;
+  }
+  renderPaneModal(s);
+}
+/* interrupt affordance: while the reply plays, a chip lets the owner cut it with one
+   click. It NEVER auto-cuts — the agent finishes its whole story/answer unless the
+   owner clicks (or speaks over it in natural mode). Typed text is sent instead
+   (sending cuts the reply too). interrupt_countdown_s=0 hides the chip. */
+const countdown = {deadline:0, ticker:null, armed:false};
+function stopCountdown(){
+  countdown.armed = false; countdown.deadline = 0;
+  if (countdown.ticker){ clearInterval(countdown.ticker); countdown.ticker = null; }
+  const chip = $('btn-count'); if (chip) chip.classList.remove('on');
+}
+function fireCountdown(){
+  const input = $('input');
+  const typed = input ? String(input.value || '').trim() : '';
+  stopCountdown();
+  if (typed){
+    input.value = '';
+    api('/api/send', {text: typed});
+  } else {
+    api('/api/barge', {});
+  }
+}
+function updateCountdown(s){
+  const chip = $('btn-count'); if (!chip) return;
+  const raw = (s.settings || {}).interrupt_countdown_s;
+  const secs = (raw === undefined || raw === null) ? 10 : Number(raw);
+  const busy = s.status === 'thinking' || s.status === 'speaking' || !!s.speaking;
+  // Manual interrupt only: show the chip while the reply plays, but NEVER auto-cut.
+  // The agent always finishes its whole story/answer unless the owner clicks it.
+  if (!secs || !busy){ stopCountdown(); return; }
+  if (countdown.armed) return;
+  countdown.armed = true;
+  chip.classList.add('on');
+  const b = $('count-secs'); if (b) b.textContent = '';
+}
+/* wire-up */
+document.querySelectorAll('.rail button[data-view]').forEach(b => b.onclick = () => { if (b.dataset.sys) window._sysinfoTab = b.dataset.sys; setView(b.dataset.view); });
+/* pane headers collapse their pane */
+document.querySelectorAll('.pane > h4').forEach(h => h.onclick = () => h.parentElement.classList.toggle('closed'));
+/* rail: hide/show, with a lock that keeps it open */
+function railLocked(){ return localStorage.getItem('me3.railLock') === '1'; }
+$('btn-rail').onclick = () => {
+  if (railLocked()){ $('btn-rail').title = 'the rail is locked — unlock first'; return; }
+  const rail = document.querySelector('.rail');
+  rail.classList.toggle('collapsed');
+  localStorage.setItem('me3.rail', rail.classList.contains('collapsed') ? '1' : '');
+};
+$('btn-rail-lock').onclick = () => {
+  const now = !railLocked();
+  localStorage.setItem('me3.railLock', now ? '1' : '');
+  $('btn-rail-lock').textContent = now ? '🔒' : '🔓';
+  $('btn-rail-lock').title = now ? 'rail locked open' : 'lock the rail open';
+  if (now) document.querySelector('.rail').classList.remove('collapsed');
+};
+if (localStorage.getItem('me3.railLock') === '1') $('btn-rail-lock').textContent = '🔒';
+if (localStorage.getItem('me3.rail') === '1') document.querySelector('.rail').classList.add('collapsed');
+/* drag the divider to resize the conversation / panes split */
+$('divider').onmousedown = (e) => {
+  e.preventDefault();
+  const move = (ev) => {
+    const w = Math.max(240, Math.min(760, $('bodygrid').getBoundingClientRect().right - ev.clientX));
+    document.documentElement.style.setProperty('--inspw', w + 'px');
+  };
+  const up = () => {
+    document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up);
+    localStorage.setItem('me3.inspw', String(getComputedStyle(document.documentElement).getPropertyValue('--inspw')).trim());
+  };
+  document.addEventListener('mousemove', move); document.addEventListener('mouseup', up);
+};
+const savedW = localStorage.getItem('me3.inspw');
+if (savedW) document.documentElement.style.setProperty('--inspw', savedW);
+const vdiv = $('vdivider');
+if (vdiv){
+  vdiv.onmousedown = (e) => {
+    e.preventDefault();
+    const chat = $('view-chat');
+    const move = (ev) => {
+      if (!chat) return;
+      const rect = chat.getBoundingClientRect();
+      const pct = Math.max(22, Math.min(78, ((ev.clientY - rect.top - 44) / Math.max(200, rect.height - 44)) * 100));
+      document.documentElement.style.setProperty('--chattop', pct.toFixed(1) + '%');
+    };
+    const up = () => {
+      document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up);
+      try { localStorage.setItem('me3.chattop', String(getComputedStyle(document.documentElement).getPropertyValue('--chattop')).trim()); } catch (err) {}
+    };
+    document.addEventListener('mousemove', move); document.addEventListener('mouseup', up);
+  };
+}
+const savedChatTop = localStorage.getItem('me3.chattop');
+if (savedChatTop) document.documentElement.style.setProperty('--chattop', savedChatTop);
+/* wake gate toggle lives at the top of the conversation pane */
+$('btn-wake').onclick = async () => {
+  const cur = Boolean((state.settings || {}).wake_gate);
+  const next = !cur;
+  const bw = $('btn-wake');
+  const paint = (on) => { if (bw){ bw.textContent = 'wake: ' + (on ? 'on' : 'off'); bw.className = 'pill wake' + (on ? ' on' : ''); } };
+  paint(next); /* immediate feedback, don't wait for the state poll */
+  const r = await api('/api/settings', {wake_gate: next});
+  const failed = Boolean(r && r.ok === false);
+  if (failed){ paint(cur); }
+  let msg = 'wake gate ' + (next ? 'ON — say Nova first' : 'off');
+  if (failed){ msg = 'wake change failed'; }
+  $('status-text').textContent = msg;
+};
+const sourceDrop = $('source-drop');
+sourceDrop.ondragover = (e) => { e.preventDefault(); sourceDrop.classList.add('dragover'); };
+sourceDrop.ondragleave = () => sourceDrop.classList.remove('dragover');
+sourceDrop.ondrop = (e) => {
+  e.preventDefault();
+  sourceDrop.classList.remove('dragover');
+  for (const file of Array.from((e.dataTransfer && e.dataTransfer.files) || [])){
+    const name = String(file.name || '').trim();
+    if (name && !sources.includes(name)){ sources.push(name); selectedSourceNames.add(name); }
+  }
+  renderSources();
+};
+/* Attachments: paste an image (Ctrl+V) or use the paperclip flow; the file is POSTed to
+   /api/attach, and its server-side path rides along with the next message so the agent can
+   describe_image it. */
+const pendingAttachments = [];
+function renderAttachmentChips(){
+  const box = $('attach-chips');
+  setKids(box, pendingAttachments.map((a, i) =>
+    el('span', {class:'pill', text:'🖼 ' + a.name, title:a.path},
+      el('button', {type:'button', style:'color:var(--bad);margin-left:4px', text:'×', onclick:() => { pendingAttachments.splice(i, 1); renderAttachmentChips(); }}))));
+}
+async function attachFile(file){
+  if (!file || !file.type || !file.type.startsWith('image/')) { note('attachments must be images'); return; }
+  const data64 = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+  const r = await api('/api/attach', {name: file.name || 'pasted.png', data64});
+  if (r && r.ok === false){ note('attach failed: ' + (r.error || 'unknown')); return; }
+  pendingAttachments.push({name: file.name || 'pasted.png', path: r.path || ''});
+  renderAttachmentChips();
+}
+document.addEventListener('paste', (e) => {
+  const files = (e.clipboardData || {}).files || [];
+  for (const f of files) attachFile(f);
+});
+$('composer').onsubmit = async (e) => {
+  e.preventDefault();
+  const text = $('input').value.trim(); if (!text) return;
+  $('input').value = '';
+  if (text.charAt(0) === '/'){ await command(text); return; }
+  let textOut = text;
+  if (pendingAttachments.length){
+    textOut += '\n' + pendingAttachments.map(a => '[image: ' + a.path + ']').join('\n');
+    pendingAttachments.length = 0;
+    renderAttachmentChips();
+  }
+  pendingSend = { text: textOut, sentAt: Date.now(), baseTurnCount: ((state && state.turns) || []).length };
+  forceScrollNext = true;
+  renderTranscript(state || {});
+  setBottomLoading('thinking…', true);
+  const r = await api('/api/send', {text: textOut, sources:Array.from(selectedSourceNames)});
+  if (r && r.ok === false){
+    pendingSend = null;
+    note('send failed: ' + (r.error || 'unknown'));
+  }
+};
+/* Ask the engine for the live mode: the polled copy can be a beat stale, and a
+   stale read is what made a second mic click restart instead of submit. */
+async function liveMode(){
+  const s = await api('/api/state');
+  return String((s && s.mode) || 'off');
+}
+/* NOTE: api() only sends POST when a body is given. /api/stop, /api/barge and
+   /api/reset are POST-only, so they MUST pass {} or the call is a GET 404. */
+$('btn-listen').onclick = async () => {
+  const mode = await liveMode();
+  await api('/api/stop', {});
+  if (mode !== 'continuous') await api('/api/listen', {mode:'continuous'});
+};
+$('btn-barge').onclick = async () => {
+  /* context-aware: a push-to-talk recording is submitted; a speaking reply is cut */
+  const s = await api('/api/state');
+  if (String((s && s.mode) || 'off') === 'ptt' || (s && s.recording)) await api('/api/stop', {});
+  else await api('/api/barge', {});
+};
+$('btn-count').onclick = () => fireCountdown();
+$('btn-lower').onclick = () => {
+  const box = $('lower'); if (!box) return;
+  box.classList.toggle('collapsed');
+  const vd = $('vdivider'); if (vd) vd.classList.toggle('hidden', box.classList.contains('collapsed'));
+  try { localStorage.setItem('me3.lower', box.classList.contains('collapsed') ? '0' : '1'); } catch (err) {}
+};
+if ($('btn-lower-zoom')){
+  $('btn-lower-zoom').onclick = () => {
+    const box = $('lower'); if (!box) return;
+    box.classList.toggle('zoom');
+    $('btn-lower-zoom').textContent = box.classList.contains('zoom') ? 'A-' : 'A+';
+  };
+}
+try { if (localStorage.getItem('me3.lower') === '0'){ $('lower').classList.add('collapsed'); if ($('vdivider')) $('vdivider').classList.add('hidden'); } } catch (err) {}
+$('btn-mic').onclick = async () => {
+  const mode = await liveMode();
+  await api('/api/stop', {});
+  if (mode !== 'ptt') await api('/api/listen', {mode:'ptt'});
+};
+$('btn-grant').onclick = async () => {
+  const path = $('folder-input').value.trim(); if (!path) return;
+  const r = await api('/api/folder', {path});
+  $('files-sub').textContent = r && r.ok ? 'granted ' + r.folder : 'refused';
+  loadFiles();
+};
+$('btn-save-agents').onclick = async () => {
+  let cfg;
+  try { cfg = JSON.parse(JSON.stringify(state.agents || {})); } catch (err) { $('status-text').textContent = 'roster unavailable: ' + err; return; }
+  for (const role of Object.keys(cfg)){
+    const sel = $('agent-' + role), fb = $('agentfb-' + role);
+    if (sel) cfg[role].model = sel.value;
+    if (fb) cfg[role].fallbacks = String(fb.value).split(',').map(v => v.trim()).filter(Boolean);
+  }
+  const r = await api('/api/agents', {config:cfg});
+  $('status-text').textContent = r && r.ok === false ? 'save failed' : 'roster saved — next turn uses it';
+};
+$('btn-latency-report').onclick = async () => {
+  const r = await api('/api/latency_report', {});
+  flashNote(r && r.ok ? 'report: ' + r.path : 'report export failed');
+};
+document.addEventListener('click', async (ev) => {
+  const t = ev.target && ev.target.closest ? ev.target.closest('button') : null;
+  if (!t) return;
+  if (t.id === 'btn-clear-profile') {
+    await api('/api/session_profile/clear', {});
+    const node = $('session-profile'); if (node) node.textContent = 'cleared';
+  } else if (t.id === 'btn-enroll-voice') {
+    const status = $('voiceprint-status');
+    t.disabled = true; if (status) status.textContent = 'recording 10 s — speak now…';
+    const r = await api('/api/voiceprint/enroll', {seconds: 10});
+    t.disabled = false;
+    if (status) status.textContent = r && r.ok ? 'enrolled ✓ (' + r.seconds + ' s)' : 'failed: ' + ((r && r.error) || 'unknown');
+  }
+});
+$('btn-save-settings').onclick = async () => {
+  const r = await api('/api/settings', {
+    tts_enabled: $('tts-enabled') ? Boolean($('tts-enabled').checked) : undefined,
+    echo_cancellation: $('echo-cancellation') ? Boolean($('echo-cancellation').checked) : undefined,
+    tts_voice: $('conv-voice') ? $('conv-voice').value : undefined,
+    chat_thinking: $('chat-thinking') ? $('chat-thinking').value : undefined,
+    barge_strictness: $('barge-strictness') ? $('barge-strictness').value : undefined,
+    wake_to_interrupt: $('wake-to-interrupt') ? Boolean($('wake-to-interrupt').checked) : undefined,
+    voiceprint_enabled: $('voiceprint-enabled') ? Boolean($('voiceprint-enabled').checked) : undefined,
+    voiceprint_barge: $('voiceprint-barge') ? Boolean($('voiceprint-barge').checked) : undefined,
+    nova_voice: $('nova-voice').value, piattos_voice: $('piattos-voice').value,
+    barge_triggers: $('barge-triggers').value.split(',').map(v => v.trim()).filter(Boolean),
+    ask_detector: $('ask-detector') ? Boolean($('ask-detector').checked) : undefined,
+    wake_speaker_lock: $('wake-speaker-lock') ? Boolean($('wake-speaker-lock').checked) : undefined,
+    require_wake_when_idle: $('require-wake-when-idle') ? Boolean($('require-wake-when-idle').checked) : undefined,
+    allow_local_llm: $('allow-local-llm') ? Boolean($('allow-local-llm').checked) : undefined,
+    announce_task_completion: $('announce-task-completion') ? Boolean($('announce-task-completion').checked) : undefined,
+    elevenlabs_amortize_spend: $('elevenlabs-amortize-spend') ? Boolean($('elevenlabs-amortize-spend').checked) : undefined,
+    paid_models_enabled: $('paid-models-enabled') ? Boolean($('paid-models-enabled').checked) : undefined,
+    front_uses_pi: $('front-uses-pi') ? Boolean($('front-uses-pi').checked) : undefined});
+  if (r && r.ok !== false){ modelCatalog = null; delete ($('model-pop') || {dataset:{}}).dataset.ready; }
+  $('status-text').textContent = r && r.ok === false ? 'save failed' : 'saved — next reply uses it';
+};
+$('btn-theme').onclick = () => { document.documentElement.dataset.theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; };
+$('btn-model').onclick = async () => {
+  const pop = $('model-pop');
+  await ensureCatalog();
+  if (!pop.dataset.ready){ fillModelSelect(''); pop.dataset.ready = '1'; }
+  pop.classList.toggle('open');
+  if (pop.classList.contains('open')) $('model-search').focus();
+};
+function fillModelSelect(filter){ $('model-select').replaceChildren(...groupedOptions(modelCatalog || [], filter)); }
+$('model-search').oninput = (e) => fillModelSelect(e.target.value);
+$('model-select').onchange = async (e) => { if (!e.target.value) return; const r = await api('/api/settings', {model:e.target.value}); $('model-pop').classList.remove('open'); $('status-text').textContent = r && r.ok === false ? 'model change failed' : 'model → ' + e.target.value; };
+document.addEventListener('keydown', (e) => { if (e.key === '/' && document.activeElement !== $('input') && !expandedPane){ e.preventDefault(); setView('chat'); $('input').focus(); } if (e.key === 'Escape'){ $('model-pop').classList.remove('open'); closePaneModal(); } });
+const initialView = (() => { try { return localStorage.getItem('me3.view') || 'chat'; } catch (e) { return 'chat'; } })();
+setView(initialView);
+const _bns = $('btn-new-session');
+if (_bns) _bns.onclick = async () => {
+  pendingSend = null;
+  forceScrollNext = true;
+  lastTxSig = '';
+  const r = await api('/api/session/new', {});
+  if (r && r.ok !== false){
+    setView('chat');
+    await poll();
+    const box = $('transcript');
+    if (box) requestAnimationFrame(() => { box.scrollTop = box.scrollHeight; });
+    const inp = $('input'); if (inp) inp.focus();
+  }
+};
+const _brs = $('btn-restart');
+if (_brs) _brs.onclick = async () => {
+  if (restartingEngine) return;
+  restartingEngine = true;
+  const oldSid = String((state && state.session_id) || '');
+  const hadTurns = Boolean(state && Array.isArray(state.turns) && state.turns.length > 0);
+  if (hadTurns && oldSid){
+    try { sessionStorage.setItem('me3.restoreSession', oldSid); } catch (err) {}
+  }
+  const preHealth = await api('/api/health');
+  const oldBoot = String((preHealth && preHealth.boot_id) || '');
+  _brs.disabled = true;
+  _brs.textContent = '↻ Restarting…';
+  setBottomLoading('restarting engine…', true);
+  await api('/api/restart', {});
+  for (let i = 0; i < 60; i++){
+    await new Promise(res => setTimeout(res, 500));
+    const h = await api('/api/health');
+    if (h && h.ok && (!oldBoot || String(h.boot_id || '') !== oldBoot)){
+      let restoreId = '';
+      try { restoreId = sessionStorage.getItem('me3.restoreSession') || ''; sessionStorage.removeItem('me3.restoreSession'); } catch (err) {}
+      if (restoreId){
+        await api('/api/session/load', {id: restoreId});
+      }
+      restartingEngine = false;
+      _brs.disabled = false;
+      _brs.textContent = '↻ Restart';
+      lastTxSig = '';
+      forceScrollNext = true;
+      await poll();
+      return;
+    }
+  }
+  restartingEngine = false;
+  _brs.disabled = false;
+  _brs.textContent = '↻ Restart';
+  setBottomLoading('restart timed out — refresh page', false);
+};
+const _be=$('btn-export'); if(_be) _be.onclick=exportTranscript;
+const _dc=$('btn-doc-confirm'); if(_dc) _dc.onclick=async()=>{ await api('/api/doctor/confirm',{confirm:true,phrase:'Yes, I confirm the changes'}); poll(); };
+const _dx=$('btn-doc-cancel'); if(_dx) _dx.onclick=async()=>{ await api('/api/doctor/cancel',{}); poll(); };
+const _pr=$('btn-perf-review'); if(_pr) _pr.onclick=()=>renderPerformance(state);
+const _vu=$('btn-v-unlock'); if(_vu) _vu.onclick=async()=>{ await api('/api/voices/unlock',{}); renderVoices(); };
+const _vr=$('btn-v-reset'); if(_vr) _vr.onclick=async()=>{ await api('/api/voices/reset',{}); renderVoices(); };
+const _va=$('v-bg-always'); if(_va) _va.onchange=()=>api('/api/settings',{bg_voice_scan_always:Boolean(_va.checked)});
+const _bp0=$('chat-barge-pill'); if(_bp0) _bp0.onclick=()=>api('/api/settings',{wake_to_interrupt:!((state.settings||{}).wake_to_interrupt === true)});
+const _vt=$('v-thresh'); if(_vt){ _vt.oninput=()=>{ if($('v-thresh-val')) $('v-thresh-val').textContent=Number(_vt.value).toFixed(2); }; _vt.onchange=async()=>{ await api('/api/voices/threshold',{threshold:Number(_vt.value)}); if($('v-action-msg')) $('v-action-msg').textContent='strictness -> '+Number(_vt.value).toFixed(2); }; }
+const _ad=$('btn-ask-doctor'); if(_ad) _ad.onclick=askDoctorAboutError;
+const _md=$('mic-device'); if(_md) _md.onchange=()=>api('/api/device',{input_index:Number(_md.value)});
+async function schedulePoll(){
+  await poll();
+  const active = Boolean(restartingEngine || pendingSend || (state && (state.recording || state.status === 'transcribing' || state.status === 'thinking' || state.status === 'speaking')));
+  setTimeout(schedulePoll, active ? 180 : 600);
+}
+schedulePoll();
+</script>
+<div id="pane-modal" role="dialog" aria-label="Expanded agent terminal">
+  <div id="pane-modal-head">
+    <h3 id="pane-modal-title">agent · pi.dev terminal</h3>
+    <span class="pill" id="pane-modal-state">idle</span>
+    <span class="grow"></span>
+    <button class="btn" type="button" onclick="modalFilter='all';renderPaneModal(state)">All</button>
+    <button class="btn" type="button" onclick="modalFilter='think';renderPaneModal(state)">Chain of thought</button>
+    <button class="btn" type="button" onclick="modalFilter='tool';renderPaneModal(state)">Tools</button>
+    <button class="btn" type="button" onclick="modalFilter='text';renderPaneModal(state)">Output</button>
+    <button class="btn danger" type="button" onclick="if(expandedPane && expandedPane!=='community') api('/api/pi/abort',{role:expandedPane})">Abort</button>
+    <button class="btn" type="button" onclick="closePaneModal()">✕ Close</button>
+  </div>
+  <div id="pane-modal-body"></div>
+  <form id="pane-modal-foot" onsubmit="event.preventDefault(); const i=$('pane-modal-input'); const v=i.value.trim(); if(!v||!expandedPane||expandedPane==='community') return; i.value=''; api('/api/pi/prompt',{role:expandedPane,text:v});">
+    <input id="pane-modal-input" placeholder="Send direct prompt to this pi.dev pane…" autocomplete="off">
+    <button class="btn primary" type="submit">Run in Pi pane</button>
+  </form>
+</div>
+</body>
+</html>
