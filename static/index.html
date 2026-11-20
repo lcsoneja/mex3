@@ -324,6 +324,8 @@ details.think .bd{padding:4px 12px 8px;max-height:200px;overflow:auto}
     <button class="btn danger" id="btn-barge" title="cut the reply now">■ Stop</button>
     <button class="btn" id="btn-count" title="The reply is playing — click to interrupt now. Otherwise the agent finishes its whole answer.">⟳ interrupt<b id="count-secs"></b></button>
     <button class="pill wake" id="btn-wake" title="wake gate: only Nova / Piattos starts a turn from idle">wake: off</button>
+    <button class="pill wake on" id="btn-instant-barge" type="button" title="If user speaks, stop TTS + LLM and listen immediately (default ON)">🎙 Speak→Stop: ON</button>
+    <button class="pill wake" id="btn-front-only" type="button" title="Solo Front mode: only Front agent answers (disables Back/Doctor delegation)">👤 Front Only: off</button>
     <button class="btn" id="btn-restart" type="button" title="Restart and reinitialize SONJ engine">↻ Restart</button>
     <button class="btn" id="btn-theme">◐</button>
     <div id="model-pop">
@@ -624,6 +626,12 @@ function renderWaveAndHeader(s){
   const wg = (s.settings || {}).wake_gate;
   const bw = $('btn-wake');
   if (bw){ bw.textContent = 'wake: ' + (wg ? 'on' : 'off'); bw.className = 'pill wake' + (wg ? ' on' : ''); }
+  const ib = (s.settings || {}).instant_barge !== false;
+  const bib = $('btn-instant-barge');
+  if (bib){ bib.textContent = '🎙 Speak→Stop: ' + (ib ? 'ON' : 'off'); bib.className = 'pill wake' + (ib ? ' on' : ''); }
+  const fo = Boolean((s.settings || {}).front_only);
+  const bfo = $('btn-front-only');
+  if (bfo){ bfo.textContent = '👤 Front Only: ' + (fo ? 'ON' : 'off'); bfo.className = 'pill wake' + (fo ? ' on' : ''); }
   const micMode = String(s.mode||'off');
   $('btn-mic').textContent = micMode === 'ptt' ? '■ Send' : '🎤';
   $('btn-mic').title = micMode === 'ptt' ? 'click to stop and send' : 'push to talk: click, speak, click to send';
@@ -2502,6 +2510,8 @@ const _vu=$('btn-v-unlock'); if(_vu) _vu.onclick=async()=>{ await api('/api/voic
 const _vr=$('btn-v-reset'); if(_vr) _vr.onclick=async()=>{ await api('/api/voices/reset',{}); renderVoices(); };
 const _va=$('v-bg-always'); if(_va) _va.onchange=()=>api('/api/settings',{bg_voice_scan_always:Boolean(_va.checked)});
 const _bp0=$('chat-barge-pill'); if(_bp0) _bp0.onclick=()=>api('/api/settings',{wake_to_interrupt:!((state.settings||{}).wake_to_interrupt === true)});
+const _bib=$('btn-instant-barge'); if(_bib) _bib.onclick=async()=>{ const cur=(state.settings||{}).instant_barge !== false; const nxt=!cur; _bib.textContent='🎙 Speak→Stop: '+(nxt?'ON':'off'); _bib.className='pill wake'+(nxt?' on':''); await api('/api/settings',{instant_barge:nxt}); };
+const _bfo=$('btn-front-only'); if(_bfo) _bfo.onclick=async()=>{ const cur=Boolean((state.settings||{}).front_only); const nxt=!cur; _bfo.textContent='👤 Front Only: '+(nxt?'ON':'off'); _bfo.className='pill wake'+(nxt?' on':''); await api('/api/settings',{front_only:nxt}); };
 const _vt=$('v-thresh'); if(_vt){ _vt.oninput=()=>{ if($('v-thresh-val')) $('v-thresh-val').textContent=Number(_vt.value).toFixed(2); }; _vt.onchange=async()=>{ await api('/api/voices/threshold',{threshold:Number(_vt.value)}); if($('v-action-msg')) $('v-action-msg').textContent='strictness -> '+Number(_vt.value).toFixed(2); }; }
 const _ad=$('btn-ask-doctor'); if(_ad) _ad.onclick=askDoctorAboutError;
 const _md=$('mic-device'); if(_md) _md.onchange=()=>api('/api/device',{input_index:Number(_md.value)});

@@ -39,6 +39,8 @@
   "chat_thinking": "off",
   "barge_strictness": "strict",
   "wake_to_interrupt": false,
+  "instant_barge": true,
+  "front_only": false,
   "voiceprint_enabled": false,
   "voiceprint_barge": false,
   "session_learning": true,

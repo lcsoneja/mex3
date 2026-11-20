@@ -387,6 +387,22 @@ class _SentenceSplitter:
         return rest
 
 
+def sanitize_for_speech(text: str) -> str:
+    """Strip markdown and URLs so TTS never reads formatting or raw links aloud."""
+    s = str(text or "")
+    # Markdown links [label](url) -> label
+    s = re.sub(r"\[([^\]]+)\]\((?:https?://|www\.)[^)]+\)", r"\1", s)
+    # Bare URLs -> omitted so TTS stays natural
+    s = re.sub(r"\bhttps?://[^\s)\]>\"']+", "", s)
+    s = re.sub(r"\bwww\.[^\s)\]>\"']+", "", s)
+    # Code fences / inline backticks / headings / bold / italic / bullets
+    s = re.sub(r"```.*?```", " ", s, flags=re.DOTALL)
+    s = re.sub(r"[`*_~]+", "", s)
+    s = re.sub(r"(^|\s)#{1,6}\s+", r"\1", s)
+    s = re.sub(r"(^|\n)\s*[-*•]\s+", r"\1", s)
+    return " ".join(s.split()).strip()
+
+
 def _clip_speech(text: str, cap: int) -> str:
     """At most `cap` characters, cut on a sentence boundary (0 = no cap)."""
     text = " ".join(str(text).split())
@@ -496,7 +512,7 @@ class SpeechPump:
 
     # ------------------------------------------------------------ producer side
     def push(self, sentence: str) -> None:
-        text = " ".join(str(sentence).split())
+        text = sanitize_for_speech(sentence)
         if text and not self._stopped.is_set():
             self._queue.put(text)
 
@@ -721,6 +737,12 @@ class Settings:
     wake_to_interrupt: bool = (
         False  # False=natural (any real speech interrupts); True=stop-word only
     )
+    instant_barge: bool = (
+        True  # Default ON: if user speaks, stop TTS + LLM and listen immediately
+    )
+    front_only: bool = (
+        False  # Toggle Solo Front mode: only Front answers (no Back/Doctor delegation)
+    )
     voiceprint_enabled: bool = False  # only the enrolled owner starts turns
     voiceprint_barge: bool = False  # only the enrolled owner may barge in
     session_learning: bool = True  # Front extracts owner preferences per turn
@@ -805,6 +827,7 @@ class Session:
         self._last_decision: dict[str, Any] | None = None
         self._back_rr: int = 0
         self._listen_port: int = 8766
+        self._last_context_chars: int = 0
         self._a2a_depth = threading.local()
         self._spend_tokens = 0
         self._spend_usd = 0.0
@@ -1233,6 +1256,11 @@ class Session:
 
     def delegate_task(self, brief: str, role: str = "back") -> str:
         """Background delegation onto an idle worker in back-1..back-5 (or doctor)."""
+        if getattr(self.settings, "front_only", False):
+            return (
+                "Front-Only mode is active — Front is the only agent answering; "
+                "handle this request directly without delegating."
+            )
         clean = " ".join(str(brief).split())[:600]
         if not clean:
             return "the task brief was empty"
@@ -1295,17 +1323,26 @@ class Session:
         )
         prompts = {
             "front": (
-                f"You are FRONT, the owner's voice companion and sole coordinator in SONJ4 (workspace: {base_workspace}). "
+                f"You are Nova, a warm, natural AI assistant voice agent in SONJ4 running on a Raspberry Pi or host workstation (workspace: {base_workspace}). "
                 + en_rule
-                + "ARCHITECTURE: 1 Front (you), 1 non-LLM Decision Classifier between user and Front (<100ms, +10% Front bias), 1 Doctor (diagnostics/settings), and 5 always-warm Back workers ("
-                + pool_list
-                + ") that handle builds, web research, verification, summaries, and automation. "
-                "LATENCY BOUNDARY: "
-                "(1) FRONT OWNS (<2s quick turns ONLY): small talk, 1-2 sentence facts, and single-shot device_tool actions. "
-                "(2) BACK POOL OWNS (>2s / multi-step / tool-heavy): build/code/games/websites, web search/news/downloads, verification/audits, summaries, desktop/browser automation -> delegate_task(brief, role='back') IMMEDIATELY with sensible defaults (never ask 2-3 clarifying questions; server dispatches to an idle worker in back-1..back-5). "
-                "(3) DOCTOR OWNS: app errors, logs, diagnostics, health checks, settings, internals -> ask_agent('doctor', ...) or delegate_task(..., role='doctor'). "
-                "NON-REFUSAL & CLASSIFIER: Rarely deny a request. Call classify_decision(task) only if genuinely unsure (it is a fast non-LLM classifier, never an LLM). "
-                "STYLE: Spoken aloud — 1-2 short natural sentences, plain prose, no markdown/lists/emoji. Say 'Checking {short task}' before delegating, and report plainly when delegated work completes, fails, or is cancelled."
+                + "CORE PROMPT RULES (v4): "
+                "Short, natural sentences; max 2 per turn. "
+                "If the user speaks, stop and listen immediately. "
+                "Confirm with the owner before costly, external, or irreversible actions. "
+                "Use MCP tools (asr-mcp, tts-mcp, tasks-mcp, and workspace tools) cleanly rather than guessing. "
+                "Never output or read markdown syntax (asterisks, hashes, backticks, bullet lists) or raw URLs aloud — paraphrase links into natural spoken words. "
+                + (
+                    "SOLO FRONT MODE IS ACTIVE: you are the ONLY agent answering. Resolve every request directly with your own reasoning and available tools; do NOT delegate to Back or Doctor. "
+                    if getattr(self.settings, "front_only", False)
+                    else (
+                        "COORDINATION & LATENCY BOUNDARY: "
+                        "(1) Handle quick conversational turns and single fast local tool calls directly (<2s). "
+                        f"(2) For multi-step, long-running, research, verification, synthesis, or workspace tasks, say 'Checking {{short task}}' first and hand off immediately via delegate_task(brief, role='back') to an idle worker in {pool_list} without asking unnecessary clarifying questions. "
+                        "(3) For app diagnostics, logs, or settings, delegate or ask 'doctor'. "
+                        "(4) Use non-LLM classify_decision(task) only when routing is genuinely uncertain. "
+                        "Always report plainly when delegated work completes, fails, or is cancelled."
+                    )
+                )
             ),
             "doctor": (
                 f"You are DOCTOR, the master SONJ4 architect, diagnostician, and settings authority (workspace: {base_workspace}). "
@@ -1414,6 +1451,11 @@ class Session:
             return "the question was empty"
         caller = str(from_role or "front").strip().lower() or "front"
         req_role = str(role).strip().lower()
+        if caller == "front" and getattr(self.settings, "front_only", False):
+            return (
+                "Front-Only mode is active — Front is the only agent answering; "
+                "respond directly without consulting other agents."
+            )
 
         # Non-LLM Decision Classifier handles all classification requests directly (<100ms).
         if req_role in {"classifier", "jev", "router"}:
@@ -1633,6 +1675,22 @@ class Session:
 
     def classify_decision(self, text: str) -> Decision:
         """Classify a request into front | back | doctor within <100 ms."""
+        if getattr(self.settings, "front_only", False):
+            dec = Decision(
+                route="front",
+                confidence=1.0,
+                reason_code="front_only_mode",
+                latency_ms=0.01,
+                score_front=1.0,
+                score_back=0.0,
+                score_doctor=0.0,
+                bias_applied=True,
+                fallback=False,
+                suggested_mode="solo",
+            )
+            with self.lock:
+                self._last_decision = dec.to_dict()
+            return dec
         active_backs = 0
         with contextlib.suppress(Exception):
             active_backs = sum(
@@ -2082,7 +2140,11 @@ class Session:
             )
             if recap:
                 prompt_parts.append("Recent conversation:\n" + recap)
-        if dec_route == "doctor":
+        if getattr(self.settings, "front_only", False):
+            prompt_parts.append(
+                "(FRONT-ONLY MODE ACTIVE: You are the ONLY agent allowed to answer. Answer directly using your own reasoning and available tools — do NOT call delegate_task, ask_agent, or start_crew.)"
+            )
+        elif dec_route == "doctor":
             prompt_parts.append(
                 f"(decision classifier: route=doctor, conf={dec_conf:.2f}, {dec_ms:.2f}ms -> hand off immediately to 'doctor' via ask_agent or delegate_task; do NOT handle diagnostics yourself)"
             )
@@ -2092,9 +2154,11 @@ class Session:
             )
         else:
             prompt_parts.append(
-                f"(decision classifier: route=front (+10% bias), mode={dec_mode}, conf={dec_conf:.2f}, {dec_ms:.2f}ms -> reply directly in 1-2 short spoken sentences or one <1s device_tool)"
+                f"(decision classifier: route=front (+10% bias), mode={dec_mode}, conf={dec_conf:.2f}, {dec_ms:.2f}ms -> reply directly in max 2 short natural sentences; never read markdown or URLs aloud)"
             )
         full_prompt = "\n\n".join(prompt_parts)
+        with self.lock:
+            self._last_context_chars = len(full_prompt)
 
         def on_delta(piece: str) -> None:
             if self._first_token_at <= 0.0:
@@ -2499,7 +2563,7 @@ class Session:
                 spoken = time.perf_counter()
                 try:
                     voice = self.tts()
-                    spoken_text = budget.take(reply.text)
+                    spoken_text = sanitize_for_speech(budget.take(reply.text))
                     if spoken_text:
                         voice.say(spoken_text)
                         voice.wait(timeout_s=90)
@@ -2792,6 +2856,8 @@ class Session:
                     "ttfa_ms": round(self._reply_audio_ms(started), 1),
                     "tokens_out": int((extra or {}).get("tokens") or 0),
                     "tok_per_s": float((extra or {}).get("tok_per_s") or 0.0),
+                    "context_chars": int(getattr(self, "_last_context_chars", 0)),
+                    "context_tokens_est": int(getattr(self, "_last_context_chars", 0) // 4),
                     "e2e_ms": (
                         round(
                             max(0.0, (started - self._utterance_end_at) * 1000.0)
@@ -3098,6 +3164,14 @@ class Session:
                                 f"{playback_ms:.0f} ms in) - likely own speaker"
                             )
                         continue
+                    if (
+                        self.status == "thinking"
+                        and getattr(self.settings, "instant_barge", True)
+                        and self.settings.barge_in
+                        and rms >= max(0.03, self.settings.barge_rms)
+                    ):
+                        log_event("instant barge while thinking — aborting LLM stream to listen")
+                        self.interrupt()
                     self._pending.put(("speech", segment))
 
                 if (
@@ -3388,6 +3462,7 @@ class Session:
             attempted = True
             started = time.perf_counter()
             try:
+                spoken = sanitize_for_speech(spoken)
                 tts = self.tts()
                 with self.lock:
                     self._speaking = True
@@ -3404,7 +3479,7 @@ class Session:
                     if not isinstance(tts, SapiTts):
                         with contextlib.suppress(TtsError):
                             fallback = SapiTts()
-                            fallback.say(_clip_speech(spoken, 600))
+                            fallback.say(_clip_speech(sanitize_for_speech(spoken), 600))
                             fallback.wait(timeout_s=60)
                             speech_failed = False
             finally:
@@ -3874,19 +3949,26 @@ class Session:
         # first "Task completed: {title}" line, no voice barge-in may cut it.
         if time.perf_counter() < getattr(self, "_protected_until", 0.0):
             return
+        instant = bool(getattr(self.settings, "instant_barge", True))
+        if not instant and not self.settings.wake_to_interrupt:
+            # When Speak->Stop is explicitly toggled OFF, require a stop word instead of cutting on speech.
+            pass
         rms = float(np.sqrt(np.mean(np.square(audio))) or 0.0)
         spoken_ms = len(audio) / 16.0
         playback_ms = (time.perf_counter() - self._speech_started_at) * 1000.0
         threshold, min_ms, _tail = self._barge_gates()
         # Adaptive echo-aware threshold: when open-mic barge is on, speech must beat speaker echo
-        if not self.settings.wake_to_interrupt and self._echo_peak_rms > 0.0:
+        if instant and not self.settings.wake_to_interrupt and self._echo_peak_rms > 0.0:
             threshold = max(threshold, min(0.65, self._echo_peak_rms * 1.35))
-        accepted = should_interrupt(
-            rms=rms,
-            segment_ms=spoken_ms,
-            playback_ms=playback_ms,
-            threshold=threshold,
-            min_segment_ms=min_ms,
+        accepted = (
+            instant
+            and should_interrupt(
+                rms=rms,
+                segment_ms=spoken_ms,
+                playback_ms=playback_ms,
+                threshold=threshold,
+                min_segment_ms=min_ms,
+            )
         )
         if not accepted:
             # Stop-word fast path: a deliberate stop word ("stop", "cancel", "quiet")
@@ -3984,7 +4066,7 @@ class Session:
         self._barge_burst_counted = True
 
     def interrupt(self) -> None:
-        """Barge-in: cut speech off immediately."""
+        """Barge-in: stop TTS playback and active Front LLM stream, drop stale audio, listen immediately."""
         with self.lock:
             self.barge_ins += 1
             if self._speaking:
@@ -3999,7 +4081,13 @@ class Session:
             with self.lock:
                 self.error = f"stop failed: {exc}"
         self._player.stop()
+        with contextlib.suppress(Exception):
+            self.pi_abort("front")
         with self.lock:
+            self._speech_run.clear()
+            self._held_text = ""
+            self._held_at = 0.0
+            self._live_turn = None
             self._speaking = False
             self.status = "listening"
 
@@ -6103,10 +6191,15 @@ class Session:
                 if pane is not None and chosen:
                     with contextlib.suppress(Exception):
                         pane.configure(model=chosen)
-            if "provider" in patch or "model" in patch:
+            if "provider" in patch or "model" in patch or "front_only" in patch:
                 self._agent = None
             if "asr_backend" in patch:
                 self._asr = None
+        if "front_only" in patch:
+            with self._pi_lock:
+                stale = self._pi_panes.pop("front", None)
+            if stale is not None:
+                threading.Thread(target=lambda p=stale: p.stop(), daemon=True).start()
         self.save_config()
 
     def save_config(self) -> None:

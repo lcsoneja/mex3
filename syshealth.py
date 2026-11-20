@@ -554,6 +554,8 @@ _SETTINGS_DOCS: dict[str, str] = {
     "chat_thinking": "Thinking level for chat turns ('off'|'low'|'medium'|'high')",
     "barge_strictness": "Barge-in sensitivity ('relaxed'|'normal'|'strict')",
     "wake_to_interrupt": "False=natural speech interrupts; True=stop-word only",
+    "instant_barge": "Default True: if user speaks, stop TTS + LLM and listen immediately",
+    "front_only": "Toggle Front-Only mode: only Front answers (no Back/Doctor delegation)",
     "voiceprint_enabled": "Gate turns by enrolled owner voiceprint when wake is ON",
     "voiceprint_barge": "Require enrolled owner voiceprint to barge in",
     "session_learning": "Extract owner preferences into session profile (True/False)",
