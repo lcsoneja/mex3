@@ -160,13 +160,21 @@ def main() -> int:
     h = _Harness("turn off the kitchen lights")
     h.session.settings.instant_barge = False
     h.judge()
-    report("instant_barge=False, no stop word -> kept speaking", not h.cuts, f"cuts={len(h.cuts)}")
+    report(
+        "instant_barge=False, no stop word -> kept speaking",
+        not h.cuts,
+        f"cuts={len(h.cuts)}",
+    )
 
     # 3a. when Auto-Interrupt (instant_barge) is ON (default), multi-word non-echo speech cuts!
     h = _Harness("turn off the kitchen lights")
     h.session.settings.instant_barge = True
     h.judge()
-    report("instant_barge=True, real multi-word speech -> cuts", len(h.cuts) == 1, f"cuts={len(h.cuts)}")
+    report(
+        "instant_barge=True, real multi-word speech -> cuts",
+        len(h.cuts) == 1,
+        f"cuts={len(h.cuts)}",
+    )
 
     # 3b. a person saying a stop word cuts the reply
     h = _Harness("stop")

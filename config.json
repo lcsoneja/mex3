@@ -36,6 +36,7 @@
   "wake_gate": false,
   "approval_gate": true,
   "echo_cancellation": true,
+  "noise_suppression": true,
   "chat_thinking": "off",
   "barge_strictness": "normal",
   "wake_to_interrupt": false,

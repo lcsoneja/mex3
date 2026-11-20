@@ -335,6 +335,8 @@ details.think .bd{padding:4px 12px 8px;max-height:200px;overflow:auto}
     <button class="pill wake" id="btn-wake" title="Wake Word Gate: OFF — Any voice starts a turn. ON — Nova waits until she hears her wake name (Nova or Piattos) before replying." data-tip="Wake Gate: OFF means any spoken sentence starts a turn. ON means Nova stays quiet from idle until you say 'Nova' or 'Piattos'.">wake: off</button>
     <button class="pill wake on" id="btn-instant-barge" type="button" title="Auto-Interrupt (Speak While Nova Talks) is ON (Default). When you speak at any moment — even mid-reply or while thinking — Nova stops speaking, aborts her active LLM reply, and listens to you immediately. Click to turn OFF." data-tip="Auto-Interrupt: ON (Default) — Start talking at any moment (even mid-reply or mid-thought) and Nova immediately stops speaking/thinking and listens to you. OFF — Only stop words (stop, wait, cancel, pause) or ■ Stop Reply will interrupt.">🎙 Auto-Interrupt: ON</button>
     <button class="pill wake" id="btn-front-only" type="button" title="Front Agent Only is OFF (Full Team Active). Nova handles quick chat directly and delegates multi-step coding, research, or repair work to the 5 Back workers and Doctor. Click to turn Front Only ON." data-tip="Front Only Mode: OFF (Full Team) — Nova delegates multi-step tasks to 5 Back workers and repairs to Doctor. ON (Solo Front) — ONLY Nova answers every request directly; Back workers & Doctor are paused.">👤 Front Only: OFF</button>
+    <button class="pill wake on" id="btn-aec" type="button" title="TTS Echo Canceller (Reference AEC) is ON (Default). Uses Nova's own TTS playback as a reference to adaptively subtract speaker echo from the mic so ASR stops hearing Nova's own voice. Click to turn OFF." data-tip="TTS Echo Canceller (AEC): ON (Default) — Subtracts Nova's own TTS speaker playback from the microphone before VAD & ASR while keeping your voice clear for interruptions. OFF — Disables TTS reference echo cancellation (use only with headphones).">🔇 TTS Echo Cancel: ON</button>
+    <button class="pill wake on" id="btn-ns" type="button" title="Telecon Noise Suppression is ON (Default). Filters steady background room noise (fans, AC hum, typing) before VAD & ASR without suppressing human speech. Click to turn OFF." data-tip="Telecon Noise Suppression: ON (Default) — Continuously cleans steady room noise (cooling fans, AC hum, typing) before VAD and ASR so speech recognition stays accurate. OFF — Raw mic audio goes straight to VAD/ASR.">🌊 Noise Suppress: ON</button>
     <button class="btn" id="btn-restart" type="button" title="Restart and reinitialize the SONJ4 engine, preserving your current session." data-tip="Restart Engine: Cleanly restarts SONJ4 and reloads this active conversation.">↻ Restart</button>
     <button class="btn" id="btn-theme" title="Switch between Dark and Light interface theme." data-tip="Theme Toggle: Switch between Dark mode and Light mode.">◐</button>
     <div id="model-pop">
@@ -661,6 +663,26 @@ function renderWaveAndHeader(s){
       ? "Front Only is ON (Solo Mode): ONLY the Front agent (Nova) answers every request directly using her own tools — Back workers (back-1..5) and Doctor are blocked from taking tasks. Click to re-enable Full Team."
       : "Front Only is OFF (Full Team Active): Nova answers quick chat directly and delegates multi-step coding, research, or repair tasks to the 5 Back workers and Doctor. Click to switch to Front Only.";
     bfo.title = ftip; bfo.setAttribute('data-tip', ftip);
+  }
+  const aecOn = (s.settings || {}).echo_cancellation !== false;
+  const baec = $('btn-aec');
+  if (baec){
+    baec.textContent = '🔇 TTS Echo Cancel: ' + (aecOn ? 'ON' : 'off');
+    baec.className = 'pill wake' + (aecOn ? ' on' : '');
+    const atip = aecOn
+      ? "TTS Echo Canceller (AEC) is ON (Default): Uses Nova's own TTS audio as a reference to adaptively subtract speaker echo from the mic so ASR stops hearing Nova's own voice, while keeping your interrupting voice clear. Click to turn OFF."
+      : "TTS Echo Canceller (AEC) is OFF: Speaker audio is NOT subtracted from the microphone (recommended only when wearing headphones). Click to turn ON.";
+    baec.title = atip; baec.setAttribute('data-tip', atip);
+  }
+  const nsOn = (s.settings || {}).noise_suppression !== false;
+  const bns = $('btn-ns');
+  if (bns){
+    bns.textContent = '🌊 Noise Suppress: ' + (nsOn ? 'ON' : 'off');
+    bns.className = 'pill wake' + (nsOn ? ' on' : '');
+    const ntip = nsOn
+      ? "Telecon Noise Suppression is ON (Default): Continuously suppresses steady room noise (fans, AC hum, typing) before VAD and ASR so speech stays crisp. Click to turn OFF."
+      : "Telecon Noise Suppression is OFF: Raw microphone audio goes straight to VAD and ASR without spectral noise reduction. Click to turn ON.";
+    bns.title = ntip; bns.setAttribute('data-tip', ntip);
   }
   const micMode = String(s.mode||'off');
   $('btn-mic').textContent = micMode === 'ptt' ? '■ Send' : '🎤';
@@ -1657,6 +1679,8 @@ function renderSettings(){
   ttsToggle.checked = st.tts_enabled !== false;
   const echoToggle = el('input', {id:'echo-cancellation', type:'checkbox', style:'width:auto;margin-right:8px'});
   echoToggle.checked = st.echo_cancellation !== false;
+  const nsToggle = el('input', {id:'noise-suppression', type:'checkbox', style:'width:auto;margin-right:8px'});
+  nsToggle.checked = st.noise_suppression !== false;
   const convVoice = el('select', {id:'conv-voice', style:'width:100%'}, (s.tts_voices || []).map(v => el('option', {value:v, text:v, selected:v === st.tts_voice ? '' : null})));
   const chatThink = el('select', {id:'chat-thinking'}, ['off','low','medium','high'].map(v => el('option', {value:v, text:v, selected:v === (st.chat_thinking || 'off') ? '' : null})));
   const bargeStrict = el('select', {id:'barge-strictness'}, ['relaxed','normal','strict'].map(v => el('option', {value:v, text:v, selected:v === (st.barge_strictness || 'normal') ? '' : null})));
@@ -1714,7 +1738,10 @@ function renderSettings(){
         el('span', {text:'Enable voice audio output (TTS speaker)'})),
       el('label', {class:'srow', style:'cursor:pointer;margin-top:6px'},
         echoToggle,
-        el('span', {text:'Echo cancellation — stop the app hearing its own voice (' + (s.echo_engine || 'numpy-correlator') + ')'})),
+        el('span', {text:'TTS Echo cancellation — adaptive reference AEC (' + (s.echo_engine || 'nlms-aec') + ')'})),
+      el('label', {class:'srow', style:'cursor:pointer;margin-top:6px'},
+        nsToggle,
+        el('span', {text:'Telecon noise suppression — clean steady room/fan noise before VAD & ASR (' + (s.ns_engine || 'wiener-ns') + ')'})),
       el('div', {class:'srow', style:'margin-top:6px'}, el('span', {text:'Conversation voice', style:'font-size:10px;color:var(--dim);min-width:130px'}), convVoice),
       el('div', {class:'srow'}, el('span', {text:'Chat thinking', style:'font-size:10px;color:var(--dim);min-width:130px'}), chatThink),
       el('div', {class:'srow'}, el('span', {text:'Barge-in strictness', style:'font-size:10px;color:var(--dim);min-width:130px'}), bargeStrict),
@@ -2450,6 +2477,7 @@ $('btn-save-settings').onclick = async () => {
   const r = await api('/api/settings', {
     tts_enabled: $('tts-enabled') ? Boolean($('tts-enabled').checked) : undefined,
     echo_cancellation: $('echo-cancellation') ? Boolean($('echo-cancellation').checked) : undefined,
+    noise_suppression: $('noise-suppression') ? Boolean($('noise-suppression').checked) : undefined,
     tts_voice: $('conv-voice') ? $('conv-voice').value : undefined,
     chat_thinking: $('chat-thinking') ? $('chat-thinking').value : undefined,
     barge_strictness: $('barge-strictness') ? $('barge-strictness').value : undefined,
@@ -2545,6 +2573,8 @@ const _va=$('v-bg-always'); if(_va) _va.onchange=()=>api('/api/settings',{bg_voi
 const _bp0=$('chat-barge-pill'); if(_bp0) _bp0.onclick=()=>api('/api/settings',{wake_to_interrupt:!((state.settings||{}).wake_to_interrupt === true)});
 const _bib=$('btn-instant-barge'); if(_bib) _bib.onclick=async()=>{ const cur=(state.settings||{}).instant_barge !== false; const nxt=!cur; _bib.textContent='🎙 Auto-Interrupt: '+(nxt?'ON':'off'); _bib.className='pill wake'+(nxt?' on':''); await api('/api/settings',{instant_barge:nxt}); await poll(); };
 const _bfo=$('btn-front-only'); if(_bfo) _bfo.onclick=async()=>{ const cur=Boolean((state.settings||{}).front_only); const nxt=!cur; _bfo.textContent='👤 Front Only: '+(nxt?'ON':'OFF'); _bfo.className='pill wake'+(nxt?' on':''); await api('/api/settings',{front_only:nxt}); await poll(); };
+const _btnAec=$('btn-aec'); if(_btnAec) _btnAec.onclick=async()=>{ const cur=(state.settings||{}).echo_cancellation !== false; const nxt=!cur; _btnAec.textContent='🔇 TTS Echo Cancel: '+(nxt?'ON':'off'); _btnAec.className='pill wake'+(nxt?' on':''); await api('/api/settings',{echo_cancellation:nxt}); await poll(); };
+const _btnNs=$('btn-ns'); if(_btnNs) _btnNs.onclick=async()=>{ const cur=(state.settings||{}).noise_suppression !== false; const nxt=!cur; _btnNs.textContent='🌊 Noise Suppress: '+(nxt?'ON':'off'); _btnNs.className='pill wake'+(nxt?' on':''); await api('/api/settings',{noise_suppression:nxt}); await poll(); };
 const _vt=$('v-thresh'); if(_vt){ _vt.oninput=()=>{ if($('v-thresh-val')) $('v-thresh-val').textContent=Number(_vt.value).toFixed(2); }; _vt.onchange=async()=>{ await api('/api/voices/threshold',{threshold:Number(_vt.value)}); if($('v-action-msg')) $('v-action-msg').textContent='strictness -> '+Number(_vt.value).toFixed(2); }; }
 const _ad=$('btn-ask-doctor'); if(_ad) _ad.onclick=askDoctorAboutError;
 const _md=$('mic-device'); if(_md) _md.onchange=()=>api('/api/device',{input_index:Number(_md.value)});

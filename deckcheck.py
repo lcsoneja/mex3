@@ -123,7 +123,9 @@ def run_unit() -> int:
             s.interrupt()
             raise RuntimeError("aborted mid-turn")
 
-    s._role_fallback_chain = lambda: fallback_calls.append("called") or ["openrouter/x:free"]  # type: ignore[method-assign]
+    s._role_fallback_chain = lambda: (
+        fallback_calls.append("called") or ["openrouter/x:free"]
+    )  # type: ignore[method-assign]
     ab_agent = _AbortingAgent()
     s._should_use_front_pi = lambda: False  # type: ignore[method-assign]
     s._agent = ab_agent  # type: ignore[assignment]
@@ -144,7 +146,11 @@ def run_unit() -> int:
         "Compare Piper and Kokoro TTS speed in a summary",
         "Audit the workspace files and report how many files exist",
     ]
-    check("front_only_default_false", getattr(st, "front_only", None) is False, f"val={st.front_only}")
+    check(
+        "front_only_default_false",
+        getattr(st, "front_only", None) is False,
+        f"val={st.front_only}",
+    )
     s.update_settings({"front_only": True})
     routes_on = [s.classify_decision(q).route for q in five_tasks]
     delegations_on = [s.delegate_task(q, role="back") for q in five_tasks]
@@ -177,12 +183,71 @@ def run_unit() -> int:
         f"cycle_on={cycle_on} cycle_off={cycle_off}",
     )
 
+    # 6. Reference-based NLMS AEC cancels own TTS echo while keeping double-talk user speech
+    import numpy as np
+
+    from aec import EchoSuppressor, NoiseSuppressor, feed_reference
+
+    rng = np.random.default_rng(7)
+    tts_ref = (
+        0.35 * np.sin(2 * np.pi * 240.0 * np.arange(16000) / 16000.0)
+        + 0.25 * np.sin(2 * np.pi * 620.0 * np.arange(16000) / 16000.0)
+    ).astype(np.float32)
+    feed_reference(tts_ref, 16000)
+    # Delayed + room-attenuated echo (30 ms delay + second reflection tap)
+    delay = 480
+    echo_sig = (
+        0.55 * np.roll(tts_ref, delay) + 0.18 * np.roll(tts_ref, delay + 32)
+    ).astype(np.float32)
+    aec = EchoSuppressor()
+    raw_echo_rms: list[float] = []
+    clean_echo_rms: list[float] = []
+    echo_flags: list[bool] = []
+    for pos in range(4096, 12288, 512):
+        blk = echo_sig[pos : pos + 512]
+        out, is_e = aec.process(blk)
+        raw_echo_rms.append(float(np.sqrt(np.mean(blk * blk))))
+        clean_echo_rms.append(float(np.sqrt(np.mean(out * out))))
+        echo_flags.append(is_e)
+    erle_db = 20.0 * np.log10((sum(raw_echo_rms) + 1e-9) / (sum(clean_echo_rms) + 1e-9))
+    # Double-talk: mix distinct user voice frequency (1180 Hz) over TTS echo
+    user_voice = (0.28 * np.sin(2 * np.pi * 1180.0 * np.arange(16000) / 16000.0)).astype(np.float32)
+    dt_out, _ = aec.process((echo_sig[8192:8704] + user_voice[8192:8704]).astype(np.float32))
+    dt_rms = float(np.sqrt(np.mean(dt_out * dt_out)))
+    check(
+        "nlms_aec_cancels_tts_echo_and_preserves_double_talk",
+        erle_db >= 8.0 and any(echo_flags) and dt_rms >= 0.08,
+        f"erle_db={erle_db:.1f}dt_rms={dt_rms:.3f}",
+    )
+
+    # 7. Telecon Wiener NoiseSuppressor suppresses steady fan/room noise while passing speech
+    ns = NoiseSuppressor()
+    steady_noise = rng.normal(0.0, 0.05, 16000).astype(np.float32)
+    for pos in range(0, 8192, 512):
+        ns.process(steady_noise[pos : pos + 512])
+    noisy_blk = steady_noise[8192:8704]
+    cleaned_noise = ns.process(noisy_blk)
+    noise_att_db = 20.0 * np.log10(
+        (float(np.sqrt(np.mean(noisy_blk * noisy_blk))) + 1e-9)
+        / (float(np.sqrt(np.mean(cleaned_noise * cleaned_noise))) + 1e-9)
+    )
+    speech_plus_noise = (noisy_blk + 0.35 * np.sin(2 * np.pi * 440.0 * np.arange(512) / 16000.0)).astype(np.float32)
+    cleaned_speech = ns.process(speech_plus_noise)
+    speech_rms = float(np.sqrt(np.mean(cleaned_speech * cleaned_speech)))
+    check(
+        "telecon_wiener_ns_reduces_room_noise_preserves_speech",
+        noise_att_db >= 6.0 and speech_rms >= 0.14,
+        f"noise_att_db={noise_att_db:.1f} speech_rms={speech_rms:.3f}",
+    )
+
     passed = sum(1 for _, ok, _ in RESULTS if ok)
     print(f"\nUNIT RESULT: {passed}/{len(RESULTS)} passed")
     return 0 if passed == len(RESULTS) else 1
 
 
-def _http(base: str, path: str, body: dict | None = None, timeout: float = 30.0) -> dict:
+def _http(
+    base: str, path: str, body: dict | None = None, timeout: float = 30.0
+) -> dict:
     data = None if body is None else json.dumps(body).encode("utf-8")
     req = urllib.request.Request(
         f"{base}{path}",
@@ -198,7 +263,9 @@ def _http(base: str, path: str, body: dict | None = None, timeout: float = 30.0)
         return {"ok": False, "raw": raw[:200]}
 
 
-def _wait_idle(base: str, prev_turns: int, timeout_s: float = 45.0) -> tuple[dict | None, dict]:
+def _wait_idle(
+    base: str, prev_turns: int, timeout_s: float = 45.0
+) -> tuple[dict | None, dict]:
     deadline = time.time() + timeout_s
     last = None
     while time.time() < deadline:
@@ -223,7 +290,11 @@ def run_live(port: int) -> int:
 
     try:
         # Silence speaker during automated 5-task QA while testing full UI/session state
-        _http(base, "/api/settings", {"tts_enabled": False, "instant_barge": True, "front_only": False})
+        _http(
+            base,
+            "/api/settings",
+            {"tts_enabled": False, "instant_barge": True, "front_only": False},
+        )
         _http(base, "/api/session/new", {})
 
         with sync_playwright() as p:
@@ -239,7 +310,7 @@ def run_live(port: int) -> int:
 
             # 1. Button visibility, clear labels, and specific tooltips
             btn_info = page.evaluate(
-                """() => ['btn-instant-barge','btn-front-only','btn-barge','btn-listen','btn-wake'].map(id => {
+                """() => ['btn-instant-barge','btn-front-only','btn-aec','btn-ns','btn-barge','btn-listen','btn-wake'].map(id => {
                     const el = document.getElementById(id);
                     const r = el.getBoundingClientRect();
                     return {
@@ -252,8 +323,16 @@ def run_live(port: int) -> int:
             )
             check(
                 "live_topbar_buttons_and_specific_tooltips",
-                all(b["vis"] and b["y"] < 60 and len(b["title"]) >= 80 and len(b["tip"]) >= 70 for b in btn_info),
-                ", ".join(f"{b['id']}(y={b['y']},title={len(b['title'])}c)" for b in btn_info),
+                all(
+                    b["vis"]
+                    and b["y"] < 60
+                    and len(b["title"]) >= 80
+                    and len(b["tip"]) >= 70
+                    for b in btn_info
+                ),
+                ", ".join(
+                    f"{b['id']}(y={b['y']},title={len(b['title'])}c)" for b in btn_info
+                ),
             )
 
             # Hover check on #btn-front-only and #btn-instant-barge
@@ -288,9 +367,15 @@ def run_live(port: int) -> int:
             stop_reqs: list[str] = []
             page.on(
                 "request",
-                lambda req: barge_reqs.append(req.url)
-                if req.url.endswith("/api/barge")
-                else (stop_reqs.append(req.url) if req.url.endswith("/api/stop") else None),
+                lambda req: (
+                    barge_reqs.append(req.url)
+                    if req.url.endswith("/api/barge")
+                    else (
+                        stop_reqs.append(req.url)
+                        if req.url.endswith("/api/stop")
+                        else None
+                    )
+                ),
             )
             page.evaluate(
                 "fetch('/api/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:'Write a very long 6 paragraph explanation of Fourier transforms step by step.'})})"
@@ -299,7 +384,9 @@ def run_live(port: int) -> int:
             saw_busy = False
             for _ in range(30):
                 st_b = _http(base, "/api/state")
-                if st_b.get("status") in ("thinking", "speaking") or st_b.get("speaking"):
+                if st_b.get("status") in ("thinking", "speaking") or st_b.get(
+                    "speaking"
+                ):
                     saw_busy = True
                     break
                 time.sleep(0.1)
@@ -365,17 +452,48 @@ def run_live(port: int) -> int:
                 and not js_errs,
                 f"cycle=[{s_off1['settings']['front_only']},{s_on2['settings']['front_only']},{s_off2['settings']['front_only']}] js_errs={js_errs}",
             )
+            # 5. Live AEC & Telecon NS topbar button toggles + tooltip checks
+            page.click("#btn-aec")
+            page.wait_for_timeout(400)
+            s_aec_off = _http(base, "/api/state")
+            page.click("#btn-aec")
+            page.wait_for_timeout(400)
+            s_aec_on = _http(base, "/api/state")
+            page.click("#btn-ns")
+            page.wait_for_timeout(400)
+            s_ns_off = _http(base, "/api/state")
+            page.click("#btn-ns")
+            page.wait_for_timeout(400)
+            s_ns_on = _http(base, "/api/state")
+            check(
+                "live_aec_and_ns_topbar_toggles",
+                (not s_aec_off["settings"]["echo_cancellation"])
+                and bool(s_aec_on["settings"]["echo_cancellation"])
+                and (not s_ns_off["settings"]["noise_suppression"])
+                and bool(s_ns_on["settings"]["noise_suppression"])
+                and s_ns_on.get("echo_engine") == "nlms-aec"
+                and s_ns_on.get("ns_engine") == "wiener-ns",
+                f"aec={s_aec_off['settings']['echo_cancellation']}->{s_aec_on['settings']['echo_cancellation']} ns={s_ns_off['settings']['noise_suppression']}->{s_ns_on['settings']['noise_suppression']}",
+            )
             browser.close()
     finally:
         _http(
             base,
             "/api/settings",
-            {"tts_enabled": orig_tts, "instant_barge": True, "front_only": False},
+            {
+                "tts_enabled": orig_tts,
+                "instant_barge": True,
+                "front_only": False,
+                "echo_cancellation": True,
+                "noise_suppression": True,
+            },
         )
         _http(base, "/api/session/new", {})
 
     passed = sum(1 for _, ok, _ in RESULTS if ok)
-    print(f"\nLIVE RESULT: {passed}/{len(RESULTS)} passed (orig instant_barge={orig_ib}, front_only={orig_fo} -> restored ON/OFF)")
+    print(
+        f"\nLIVE RESULT: {passed}/{len(RESULTS)} passed (orig instant_barge={orig_ib}, front_only={orig_fo} -> restored ON/OFF)"
+    )
     return 0 if passed == len(RESULTS) else 1
 
 

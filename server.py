@@ -37,7 +37,7 @@ from urllib.parse import urlparse
 
 import numpy as np
 
-from aec import EchoSuppressor
+from aec import EchoSuppressor, NoiseSuppressor
 from agent import Agent, ToolBoxLike
 from asr import AsrError, CloudAsr, create_asr, discover_models
 from audio import (
@@ -734,6 +734,7 @@ class Settings:
     # Echo defence: suppress the app's own TTS arriving back through the mic.
     # Owner-toggleable in Settings; the playback guards below stay on regardless.
     echo_cancellation: bool = True
+    noise_suppression: bool = True  # Telecon spectral noise suppression before VAD/ASR
     # Conversation tuning — owner-toggleable in Settings / Pipeline view.
     chat_thinking: str = "off"  # off|low|medium|high for chat/command turns
     barge_strictness: str = "normal"  # relaxed|normal|strict
@@ -913,8 +914,9 @@ class Session:
         self.ignored_while_speaking = 0
         self._barge_judged_at = 0.0
         self._barge_silence = 0
-        # Reference-correlation echo suppressor (WebRTC AEC3 is SAC-blocked here).
+        # Reference-based adaptive NLMS echo canceller + telecon spectral noise suppressor.
         self._echo = EchoSuppressor()
+        self._ns = NoiseSuppressor()
         # Owner voiceprint (3d-speaker CAM++): enrollment + turn/barge gating.
         self._voiceprint = Voiceprint(
             MODELS_DIR
@@ -3069,6 +3071,15 @@ class Session:
                     if not self.settings.barge_in:
                         self._speech_run.clear()
                         continue
+                    # Pure-NumPy TTS-reference AEC + telecon NS run live during playback:
+                    # cancels our own speaker echo before ASR/barge-in while keeping double-talk intact.
+                    if self.settings.echo_cancellation:
+                        block, was_echo = self._echo.process(block)
+                        if was_echo:
+                            with self.lock:
+                                self.echo_drops += 1
+                    if getattr(self.settings, "noise_suppression", True):
+                        block = self._ns.process(block)
                     rms_blk = float(np.sqrt(np.mean(np.square(block))) or 0.0)
                     if rms_blk >= 0.014:
                         self._speech_run.append(block)
@@ -3095,6 +3106,8 @@ class Session:
                         with self.lock:
                             self.echo_drops += 1
                         continue
+                if getattr(self.settings, "noise_suppression", True):
+                    block = self._ns.process(block)
 
                 # Background room-voice scanner: runs only when Voices dashboard is open
                 # (seen within 5s) OR manual toggle bg_voice_scan_always is ON, and someone
@@ -3145,7 +3158,7 @@ class Session:
                         and getattr(self.settings, "instant_barge", True)
                         and self.settings.barge_in
                     ):
-                        self._think_speech_ms += (len(block) / 16.0)
+                        self._think_speech_ms += len(block) / 16.0
                         if self._think_speech_ms >= 190.0 and blk_rms >= max(
                             0.024, self.settings.barge_rms * 0.5
                         ):
@@ -3929,9 +3942,7 @@ class Session:
                 return False
             with self.lock:
                 self.ignored_while_speaking += 1
-            log_event(
-                f"kept speaking - heard {heard[:50]!r} but no stop word in it"
-            )
+            log_event(f"kept speaking - heard {heard[:50]!r} but no stop word in it")
             self._think(f"kept speaking - {heard[:40]!r} has no stop word", "echo")
             return True
         with self.lock:
@@ -5657,6 +5668,9 @@ class Session:
                 "devices": self.device_summary(),
                 "echo_engine": getattr(self._echo, "name", "off"),
                 "echo_score": round(float(getattr(self._echo, "last_score", 0.0)), 3),
+                "echo_erle_db": round(float(getattr(self._echo, "last_erle_db", 0.0)), 1),
+                "ns_engine": getattr(self._ns, "name", "off"),
+                "ns_reduction_db": round(float(getattr(self._ns, "last_reduction_db", 0.0)), 1),
                 "quality": self.quality_stats(),
                 "startup_check": getattr(self, "startup_check", {}),
                 "voiceprint": {
