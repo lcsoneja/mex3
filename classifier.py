@@ -21,6 +21,7 @@ from __future__ import annotations
 import concurrent.futures
 import re
 import time
+from collections import deque
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -389,12 +390,21 @@ class DecisionClassifier:
         self._pool = concurrent.futures.ThreadPoolExecutor(
             max_workers=1, thread_name_prefix="sonj4-clf"
         )
+        self._latencies: deque[float] = deque(maxlen=60)
+        self._total_latency_ms: float = 0.0
         self.stats: dict[str, Any] = {
             "calls": 0,
             "routes": {"front": 0, "back": 0, "doctor": 0},
             "fallbacks": 0,
             "last_latency_ms": 0.0,
+            "avg_latency_ms": 0.0,
+            "p50_latency_ms": 0.0,
+            "p95_latency_ms": 0.0,
             "max_latency_ms": 0.0,
+            "recent_latencies": [],
+            "deadline_ms": self.deadline_ms,
+            "front_bias_pct": round(FRONT_BIAS * 100),
+            "onnx_ready": self.has_onnx(),
             "stage": "rules-v1",
         }
 
@@ -476,10 +486,24 @@ class DecisionClassifier:
         self.stats["routes"][dec.route] = self.stats["routes"].get(dec.route, 0) + 1
         if dec.fallback:
             self.stats["fallbacks"] += 1
-        self.stats["last_latency_ms"] = dec.latency_ms
-        self.stats["max_latency_ms"] = max(
-            float(self.stats["max_latency_ms"]), dec.latency_ms
+        self._total_latency_ms += float(dec.latency_ms)
+        self._latencies.append(float(dec.latency_ms))
+        vals = sorted(self._latencies)
+        n = len(vals)
+        self.stats["last_latency_ms"] = round(float(dec.latency_ms), 3)
+        self.stats["avg_latency_ms"] = round(
+            self._total_latency_ms / max(1, int(self.stats["calls"])), 3
         )
+        self.stats["p50_latency_ms"] = round(vals[n // 2], 3) if n else 0.0
+        self.stats["p95_latency_ms"] = (
+            round(vals[min(n - 1, int(n * 0.95))], 3) if n else 0.0
+        )
+        self.stats["max_latency_ms"] = round(
+            max(float(self.stats["max_latency_ms"]), float(dec.latency_ms)), 3
+        )
+        self.stats["recent_latencies"] = [
+            round(v, 3) for v in list(self._latencies)[-40:]
+        ]
 
     def to_turn_kind(self, text: str) -> str:
         """Map classifier output to legacy filler/router label ('command'|'chat'|'complex')."""

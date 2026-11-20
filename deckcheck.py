@@ -83,10 +83,10 @@ def run_unit() -> int:
         f"clean={clean!r}",
     )
 
-    # 3. instant_barge default True + realistic gates + interrupt() aborts LLM & filler & audio
+    # 3. instant_barge default False + realistic gates + interrupt() aborts LLM & filler & audio
     check(
-        "instant_barge_default_true",
-        bool(getattr(st, "instant_barge", None) is True),
+        "instant_barge_default_false",
+        getattr(st, "instant_barge", None) is False,
         f"val={getattr(st, 'instant_barge', None)}",
     )
     thresh, min_ms, _tail = s._barge_gates()
@@ -211,8 +211,12 @@ def run_unit() -> int:
         echo_flags.append(is_e)
     erle_db = 20.0 * np.log10((sum(raw_echo_rms) + 1e-9) / (sum(clean_echo_rms) + 1e-9))
     # Double-talk: mix distinct user voice frequency (1180 Hz) over TTS echo
-    user_voice = (0.28 * np.sin(2 * np.pi * 1180.0 * np.arange(16000) / 16000.0)).astype(np.float32)
-    dt_out, _ = aec.process((echo_sig[8192:8704] + user_voice[8192:8704]).astype(np.float32))
+    user_voice = (
+        0.28 * np.sin(2 * np.pi * 1180.0 * np.arange(16000) / 16000.0)
+    ).astype(np.float32)
+    dt_out, _ = aec.process(
+        (echo_sig[8192:8704] + user_voice[8192:8704]).astype(np.float32)
+    )
     dt_rms = float(np.sqrt(np.mean(dt_out * dt_out)))
     check(
         "nlms_aec_cancels_tts_echo_and_preserves_double_talk",
@@ -231,13 +235,34 @@ def run_unit() -> int:
         (float(np.sqrt(np.mean(noisy_blk * noisy_blk))) + 1e-9)
         / (float(np.sqrt(np.mean(cleaned_noise * cleaned_noise))) + 1e-9)
     )
-    speech_plus_noise = (noisy_blk + 0.35 * np.sin(2 * np.pi * 440.0 * np.arange(512) / 16000.0)).astype(np.float32)
+    speech_plus_noise = (
+        noisy_blk + 0.35 * np.sin(2 * np.pi * 440.0 * np.arange(512) / 16000.0)
+    ).astype(np.float32)
     cleaned_speech = ns.process(speech_plus_noise)
     speech_rms = float(np.sqrt(np.mean(cleaned_speech * cleaned_speech)))
     check(
         "telecon_wiener_ns_reduces_room_noise_preserves_speech",
         noise_att_db >= 6.0 and speech_rms >= 0.14,
         f"noise_att_db={noise_att_db:.1f} speech_rms={speech_rms:.3f}",
+    )
+
+    # 8. Decision Classifier performance stats & feature_distribution telemetry
+    from syshealth import feature_distribution
+
+    s.classify_decision("what time is it")
+    s.classify_decision("build a python calculator script")
+    dist = feature_distribution(s)
+    clf_perf = dist.get("classifier_perf") or {}
+    feat_names = " | ".join(f.get("name", "") for f in (dist.get("features") or []))
+    check(
+        "classifier_perf_telemetry_in_distribution",
+        int(clf_perf.get("calls") or 0) >= 2
+        and len(clf_perf.get("recent_latencies") or []) >= 2
+        and int(clf_perf.get("front_bias_pct") or 0) == 10
+        and "Decision Classifier" in feat_names
+        and "Echo Canceller" in feat_names
+        and "Noise Suppressor" in feat_names,
+        f"calls={clf_perf.get('calls')} p95={clf_perf.get('p95_latency_ms')}ms",
     )
 
     passed = sum(1 for _, ok, _ in RESULTS if ok)
@@ -289,11 +314,17 @@ def run_live(port: int) -> int:
     orig_fo = bool(orig_st.get("front_only", False))
 
     try:
-        # Silence speaker during automated 5-task QA while testing full UI/session state
+        # Silence speaker during automated 5-task QA while starting at exact shipped defaults
         _http(
             base,
             "/api/settings",
-            {"tts_enabled": False, "instant_barge": True, "front_only": False},
+            {
+                "tts_enabled": False,
+                "instant_barge": False,
+                "front_only": False,
+                "echo_cancellation": True,
+                "noise_suppression": True,
+            },
         )
         _http(base, "/api/session/new", {})
 
@@ -341,24 +372,26 @@ def run_live(port: int) -> int:
             page.hover("#btn-front-only")
             page.wait_for_timeout(120)
 
-            # 2. Toggle Auto-Interrupt OFF -> ON via button click
-            page.click("#btn-instant-barge")
-            page.wait_for_timeout(450)
-            s_ib_off = _http(base, "/api/state")
-            txt_off = page.text_content("#btn-instant-barge") or ""
-            tip_off = page.get_attribute("#btn-instant-barge", "title") or ""
+            # 2. Auto-Interrupt starts OFF by default -> toggle ON -> toggle back OFF
+            txt_init = page.text_content("#btn-instant-barge") or ""
+            tip_init = page.get_attribute("#btn-instant-barge", "title") or ""
             page.click("#btn-instant-barge")
             page.wait_for_timeout(450)
             s_ib_on = _http(base, "/api/state")
             txt_on = page.text_content("#btn-instant-barge") or ""
+            page.click("#btn-instant-barge")
+            page.wait_for_timeout(450)
+            s_ib_off2 = _http(base, "/api/state")
+            txt_off2 = page.text_content("#btn-instant-barge") or ""
             check(
-                "live_auto_interrupt_button_toggle_and_tooltip",
-                (not s_ib_off["settings"]["instant_barge"])
-                and ("off" in txt_off.lower())
-                and ("is off" in tip_off.lower())
+                "live_auto_interrupt_default_off_toggle_on_off",
+                ("off" in txt_init.lower())
+                and ("off (default)" in tip_init.lower())
                 and bool(s_ib_on["settings"]["instant_barge"])
-                and ("on" in txt_on.lower()),
-                f"off={txt_off!r} -> on={txt_on!r}",
+                and ("on" in txt_on.lower())
+                and (not s_ib_off2["settings"]["instant_barge"])
+                and ("off" in txt_off2.lower()),
+                f"init={txt_init!r} -> on={txt_on!r} -> off={txt_off2!r}",
             )
 
             # 3. Half-way Stop Reply button (#btn-barge) test during active prompt
@@ -475,6 +508,67 @@ def run_live(port: int) -> int:
                 and s_ns_on.get("ns_engine") == "wiener-ns",
                 f"aec={s_aec_off['settings']['echo_cancellation']}->{s_aec_on['settings']['echo_cancellation']} ns={s_ns_off['settings']['noise_suppression']}->{s_ns_on['settings']['noise_suppression']}",
             )
+
+            # 6. Live Workflow pane + Lower panes + Pipeline pane verification
+            page.click(".rail button[data-view='chat']")
+            page.wait_for_timeout(350)
+            wf_txt = page.inner_text("#tab-workflow")
+            pl_txt = page.inner_text("#tab-pipeline")
+            pl_count = page.locator("#tab-pipeline .pv").count()
+            check(
+                "live_workflow_and_pipeline_panes_updated",
+                ("audio cleanup" in wf_txt)
+                and ("classifier" in wf_txt)
+                and ("back-1" in wf_txt)
+                and ("back-5" in wf_txt)
+                and ("doctor" in wf_txt)
+                and ("researcher" not in wf_txt)
+                and pl_count == 8
+                and ("AEC" in pl_txt),
+                f"pv={pl_count} wf_has_back1_to_5={'back-1' in wf_txt and 'back-5' in wf_txt}",
+            )
+
+            # 7. Decision Classifier Performance card + chart + Docs view verification
+            page.click(".rail button[data-view='performance']")
+            page.wait_for_timeout(450)
+            clf_card_txt = page.inner_text("#perf-clf-card")
+            clf_stage_txt = page.inner_text("#perf-clf-stage")
+            page.click(".rail button[data-view='docs']")
+            page.wait_for_timeout(450)
+            docs_full_txt = page.inner_text("#docs-body")
+            page.click("#docs-tab-summary")
+            page.wait_for_timeout(250)
+            docs_sum_txt = page.inner_text("#docs-body")
+            check(
+                "live_classifier_performance_and_docs_updated",
+                ("decision classifier performance" in clf_card_txt.lower())
+                and ("calls" in clf_card_txt.lower())
+                and ("p95 ms" in clf_card_txt.lower())
+                and bool(clf_stage_txt.strip())
+                and ("nlms-aec" in docs_full_txt)
+                and ("wiener-ns" in docs_full_txt)
+                and ("nlms-aec" in docs_sum_txt)
+                and ("Auto-Interrupt" in docs_sum_txt),
+                f"clf_stage={clf_stage_txt!r} docs_ok=True",
+            )
+
+            # 8. Zero horizontal scrollbar across viewports & primary views
+            overflow_issues: list[str] = []
+            for vw, vh in ((1440, 900), (1280, 800)):
+                page.set_viewport_size({"width": vw, "height": vh})
+                for vname in ("chat", "dashboard", "performance", "pipeline", "docs", "settings"):
+                    page.click(f".rail button[data-view='{vname}']")
+                    page.wait_for_timeout(200)
+                    dims = page.evaluate(
+                        "() => ({sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth})"
+                    )
+                    if int(dims["sw"]) > int(dims["cw"]):
+                        overflow_issues.append(f"{vw}x{vh}/{vname}:{dims['sw']}>{dims['cw']}")
+            check(
+                "live_zero_horizontal_scrollbar",
+                not overflow_issues and not js_errs,
+                f"issues={overflow_issues or 'none'} js_errs={js_errs}",
+            )
             browser.close()
     finally:
         _http(
@@ -482,7 +576,7 @@ def run_live(port: int) -> int:
             "/api/settings",
             {
                 "tts_enabled": orig_tts,
-                "instant_barge": True,
+                "instant_barge": False,
                 "front_only": False,
                 "echo_cancellation": True,
                 "noise_suppression": True,

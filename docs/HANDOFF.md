@@ -1,27 +1,27 @@
 # SONJ4 — Handoff
 
-Version: see `VERSION` (4.0.0). Read with `docs/INSTALL.md`.
+Version: see `VERSION` (`4.0.0`). Read with `docs/INSTALL.md` and `docs/SONJ_DOCUMENTATION.md`.
 
-## Consolidated Agent Architecture
+## Consolidated Agent & Audio Architecture
 
 | Component | Count | Type | Role |
 |---|---:|---|---|
-| **Front** | 1 | LLM Pi pane | Voice companion & coordinator (<2s turns, never slow work) |
-| **Decision Classifier** | 1 | Non-LLM (`classifier.py`) | Sits between user and Front; <100ms hard deadline; +10% Front bias; choices: `front` \| `back` \| `doctor` |
-| **Doctor** | 1 | LLM Pi pane + `doctor.py` | App diagnostics, logs, settings proposals (15s confirm), fixed catalogue repairs |
-| **Back Pool** | 5 | Always-warm LLM Pi panes (`back-1..back-5`) | Unified generalist workers: build, web research, critic/verify, summarize, desktop/browser MCP, peer A2A |
+| **AEC + NS** | 2 DSP stages | Pure NumPy (`aec.py`) | `nlms-aec` (TTS reference cancellation, ON default) + `wiener-ns` (telecon room noise suppression, ON default) |
+| **Decision Classifier** | 1 | Non-LLM (`classifier.py`) | Sits between user and Front; `<100ms` budget; `+10%` Front bias; `p50/p95/max` stats in Performance view |
+| **Front (Nova)** | 1 | LLM Pi pane | Task-agnostic voice companion (`prompts/front_system_v4.txt`, max 2 sentences, no MD/URLs aloud) |
+| **Doctor** | 1 | LLM Pi pane + `doctor.py` | Read-only diagnostics, logs, settings proposals (15 s confirm), catalogue repairs |
+| **Back Pool** | 5 | Always-warm LLM Pi panes (`back-1..back-5`) | Unified generalist workers: build, research, verify, summarize, MCP, peer A2A |
 
-## Key Modules
+## Default Control States
 
-- `classifier.py` — `DecisionRequest` -> `Decision` (`<100ms`, Stage 1 rules + Stage 2 ONNX slot under `models/classifier/`, `+0.10` Front bias).
-- `server.py` — Session, audio loop, Decision Classifier integration, 5-worker idle scheduler, always-warm pool (`warm_all_panes()`), task announce/TTS pipeline (`_deliver_task_report` + `_announce_pending_once`).
-- `tasks.py` — Background task/crew queue (`max_parallel: 5`).
-- `.pi/extensions/sonj_bridge.ts` — Bridge tools for Front (`classify_decision`, `delegate_task`, `ask_agent`, `start_crew`, `device_tool`), Back (`device_tool`, `mcp_call`, `ask_agent`, `post_community`), and Doctor (`doctor_app_control`, `ask_agent`, `post_community`).
-- `sonj4_eval20.py` — 20-task evaluation suite (6 Front, 6 Back, 3 Doctor, 5 Coordination/Community independence).
+- `instant_barge` (`Auto-Interrupt`): **`false`** (stop words or `■ Stop Reply` interrupt; toggle ON for voice-over cut-in)
+- `front_only` (`Front Only`): **`false`** (full 1+1+1+5 team active; toggle ON to restrict answers to Front only)
+- `echo_cancellation` (`TTS Echo Cancel`): **`true`** (`nlms-aec`)
+- `noise_suppression` (`Noise Suppress`): **`true`** (`wiener-ns`)
 
 ## Verification Suite
 
-- `python classifiercheck.py` — DecisionClassifier contract, <100ms latency, +10% Front bias, 20 routes (27 checks).
-- `python announcecheck.py` — Task persistence & speech regression (9 checks).
-- `python sonj4_eval20.py` — Full 20-task SONJ4 harness (`--live` against SONJ4 on default port `--port 8766`).
-- `python bargecheck.py` & `python doctorcheck.py`.
+- `python deckcheck.py` / `python deckcheck.py --live --port 8766` — prompt v4, MD/URL speech sanitizer, NLMS AEC (`23.9 dB` ERLE), Wiener NS (`8.6 dB`), zero horizontal scrollbars, Classifier performance UI, half-way `■ Stop Reply`, topbar toggles, and 5-task Front-Only cycle.
+- `python classifiercheck.py` — DecisionClassifier contract, `<100ms` latency, `+10%` Front bias, 20 routes (`27/27`).
+- `python bargecheck.py` & `python bargelatencycheck.py` — echo rejection, `Auto-Interrupt` ON/OFF gating, real ASR floor.
+- `python announcecheck.py` (`9/9`) & `python sonj4_eval20.py` (`20/20` unit, `21/21` live).

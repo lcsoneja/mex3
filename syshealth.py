@@ -200,7 +200,43 @@ def feature_distribution(session: Any) -> dict[str, Any]:
     )
     avg_vp = float((vp_dash.get("telemetry") or {}).get("avg_embed_ms") or 0.0)
 
+    clf_stats = {}
+    if hasattr(session, "classifier"):
+        with contextlib.suppress(Exception):
+            clf_stats = dict(session.classifier().stats)
+    aec_obj = getattr(session, "_echo", None)
+    ns_obj = getattr(session, "_ns", None)
+
     features = [
+        {
+            "name": f"Decision Classifier ({clf_stats.get('stage', 'rules-v1')})",
+            "mem_mb": 0.4,
+            "avg_ms": round(
+                float(
+                    clf_stats.get("avg_latency_ms")
+                    or clf_stats.get("last_latency_ms")
+                    or 0.0
+                ),
+                3,
+            ),
+            "kind": "non-LLM <100ms",
+        },
+        {
+            "name": f"TTS Echo Canceller ({getattr(aec_obj, 'name', 'nlms-aec')})",
+            "mem_mb": 0.8,
+            "avg_ms": 0.3 if getattr(session.settings, "echo_cancellation", True) else 0.0,
+            "kind": "local DSP"
+            if getattr(session.settings, "echo_cancellation", True)
+            else "off",
+        },
+        {
+            "name": f"Telecon Noise Suppressor ({getattr(ns_obj, 'name', 'wiener-ns')})",
+            "mem_mb": 0.3,
+            "avg_ms": 0.25 if getattr(session.settings, "noise_suppression", True) else 0.0,
+            "kind": "local DSP"
+            if getattr(session.settings, "noise_suppression", True)
+            else "off",
+        },
         {
             "name": "ASR ("
             + (
@@ -252,6 +288,49 @@ def feature_distribution(session: Any) -> dict[str, Any]:
         },
     ]
 
+    sh = system_health()
+    tps_vals = [
+        float((t.get("timings") or {}).get("tok_per_s") or 0.0)
+        for t in turns
+        if (t.get("timings") or {}).get("tok_per_s")
+    ]
+    avg_tps = round(sum(tps_vals) / len(tps_vals), 1) if tps_vals else 0.0
+    by_model: dict[str, list[dict[str, float]]] = {}
+    for t in turns:
+        m_id = str(
+            t.get("model") or getattr(session.settings, "model", "") or "unknown"
+        )
+        tm = t.get("timings") or {}
+        by_model.setdefault(m_id, []).append(
+            {
+                "ttft": float(tm.get("first_token_ms") or 0.0),
+                "tok_s": float(tm.get("tok_per_s") or 0.0),
+            }
+        )
+    model_scorecard = []
+    for m_id, m_rows in by_model.items():
+        ttfts = [r["ttft"] for r in m_rows if r["ttft"] > 0]
+        toks = [r["tok_s"] for r in m_rows if r["tok_s"] > 0]
+        model_scorecard.append(
+            {
+                "model": m_id,
+                "turns": len(m_rows),
+                "avg_ttft_ms": round(sum(ttfts) / len(ttfts), 1) if ttfts else 0.0,
+                "avg_tok_s": round(sum(toks) / len(toks), 1) if toks else 0.0,
+            }
+        )
+    vp = getattr(session, "_voiceprint", None)
+    nf = float(getattr(vp, "_noise_floor", 0.0) or 0.0)
+    lvl = float(getattr(session, "level", 0.0) or 0.0)
+    hd_warn = []
+    if (
+        float(sh.get("ram_total_gb", 0) or 0) - float(sh.get("ram_used_gb", 0) or 0)
+        < 0.8
+    ):
+        hd_warn.append("low RAM")
+    if float(sh.get("disk_free_gb", 0) or 0) < 1.0:
+        hd_warn.append("low disk")
+
     return {
         "python_rss_mb": total_rss_mb,
         "pi_panes_rss_mb": round(pi_rss_mb, 1),
@@ -259,6 +338,26 @@ def feature_distribution(session: Any) -> dict[str, Any]:
         "features": features,
         "pane_procs": pane_procs,
         "reply_blocks": blocks,
+        "classifier_perf": clf_stats,
+        "gate_funnel": dict(getattr(session, "_gate_stats", {}) or {}),
+        "snr_info": {
+            "noise_floor": round(nf, 4),
+            "snr_ratio": round(lvl / max(nf, 1e-4), 1) if lvl > 0 else 0.0,
+        },
+        "avg_tok_per_s": avg_tps,
+        "model_scorecard": model_scorecard,
+        "pi_headroom": {
+            "ram_free_gb": round(
+                max(
+                    0.0,
+                    float(sh.get("ram_total_gb", 0))
+                    - float(sh.get("ram_used_gb", 0)),
+                ),
+                1,
+            ),
+            "disk_free_gb": float(sh.get("disk_free_gb", 0)),
+            "warnings": hd_warn,
+        },
     }
 
 
@@ -316,6 +415,15 @@ def performance_review(session: Any) -> dict[str, Any]:
         )
     if avg_ack > 0 and avg_ack <= 350:
         findings.append(f"Ack filler is fast ({avg_ack:.0f} ms avg).")
+    if hasattr(session, "classifier"):
+        with contextlib.suppress(Exception):
+            cs = session.classifier().stats
+            if cs.get("calls", 0) > 0:
+                findings.append(
+                    f"Decision Classifier: {cs.get('calls')} calls · p95 {float(cs.get('p95_latency_ms') or 0):.2f} ms "
+                    f"(max {float(cs.get('max_latency_ms') or 0):.2f} ms, budget <100 ms) · "
+                    f"routes={cs.get('routes')}"
+                )
 
     return {
         "turns": len(turns),
@@ -337,13 +445,13 @@ def app_introspection(session: Any) -> dict[str, Any]:
     """Read-only view for the left-rail bottom inspector (prompts, context, skills, tools)."""
     roles = (
         "front",
-        "back",
-        "researcher",
-        "critic",
-        "summarizer",
+        "classifier",
         "doctor",
-        "jev",
-        "router",
+        "back-1",
+        "back-2",
+        "back-3",
+        "back-4",
+        "back-5",
     )
     prompts = {}
     for r in roles:
@@ -555,7 +663,7 @@ _SETTINGS_DOCS: dict[str, str] = {
     "chat_thinking": "Thinking level for chat turns ('off'|'low'|'medium'|'high')",
     "barge_strictness": "Barge-in sensitivity ('relaxed'|'normal'|'strict')",
     "wake_to_interrupt": "False=natural speech interrupts; True=stop-word only",
-    "instant_barge": "Default True: if user speaks, stop TTS + LLM and listen immediately",
+    "instant_barge": "Default False: when ON, speaking cuts TTS + LLM immediately; when OFF, stop words or Stop Reply cut",
     "front_only": "Toggle Front-Only mode: only Front answers (no Back/Doctor delegation)",
     "voiceprint_enabled": "Gate turns by enrolled owner voiceprint when wake is ON",
     "voiceprint_barge": "Require enrolled owner voiceprint to barge in",
@@ -613,20 +721,20 @@ def settings_catalog(session: Any) -> dict[str, Any]:
 
 
 def inspect_architecture(session: Any) -> dict[str, Any]:
-    """Complete architectural map of SONJ3 modules, API endpoints, agents, and MCP servers."""
+    """Complete architectural map of SONJ4 modules, API endpoints, agents, and MCP servers."""
     modules = {
-        "server.py": "Main HTTP API, Session engine, audio listen/VAD loop, barge-in, Pi panes, announcements, Doctor control",
-        "agent.py": "Fallback in-process Agent loop, ToolTrace, compaction, native DEFAULT_SYSTEM_PROMPT",
-        "toolbox.py": "Device tools (time, weather, calc, lights, timers, URL/app launch, web_search, browse_page, delegate, ask_agent, ask_jev)",
-        "tasks.py": "Background TaskManager, sequential/hierarchical crews, fallback chain, completion/failure delivery",
-        "syshealth.py": "CPU/RAM/temp telemetry, feature distribution, performance review, introspection, DoctorGate (15s auto-confirm), settings catalog",
+        "server.py": "Main HTTP API, Session engine, audio listen/VAD loop, barge-in, 7 Pi panes, announcements, Doctor control",
+        "classifier.py": "Non-LLM Decision Classifier (<100ms hard deadline, +10% Front bias, front | back | doctor)",
+        "agent.py": "Fallback in-process Agent loop, ToolTrace, compaction, task-agnostic Nova DEFAULT_SYSTEM_PROMPT",
+        "toolbox.py": "Workspace, shell/command, web search/fetch, delegation, and agent-to-agent bridge tools",
+        "tasks.py": "Background TaskManager across 5-slot Back pool (back-1..back-5), sequential/hierarchical crews, completion announcements",
+        "syshealth.py": "CPU/RAM/temp telemetry, feature distribution (+classifier), performance review, introspection, DoctorGate (15s confirm)",
         "voiceprint.py": "CAM++ 3d-speaker embeddings, top-5 voices, multi-master wake lock",
         "asr.py": "Thread-safe Sherpa-ONNX Moonshine/Parakeet/Whisper + optional cloud ASR",
-        "tts.py": "Piper/Kokoro/ElevenLabs/OpenAI TTS + filler bank",
+        "tts.py": "Piper/Kokoro/ElevenLabs/OpenAI TTS + filler bank + instant barge-in abort",
         "vad.py": "Silero VAD streaming + partial() live-speech access",
-        "aec.py": "Reference-correlation echo suppressor",
-        "pi_rpc.py": "Live Pi RPC subprocess manager (per-role isolated terminal panes)",
-        "router.py": "Fast keyword/LLM turn classifier and semantic endpointing",
+        "aec.py": "Adaptive reference NLMS Echo Canceller (nlms-aec) + Telecon Wiener Noise Suppressor (wiener-ns)",
+        "pi_rpc.py": "Live Pi RPC subprocess manager (front, back-1..back-5, doctor panes)",
         "doctor.py": "Startup/runtime health checks & safe repairs",
         "computer_mcp.py": "Full desktop computer-use MCP server (Back agent only)",
         "browser_mcp.py": "Playwright browser automation MCP server (Back agent only)",

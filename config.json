@@ -1,6 +1,6 @@
 {
   "provider": "github-copilot",
-  "model": "github-copilot/gpt-5.4-nano",
+  "model": "github-copilot/gpt-6-luna",
   "asr_backend": "parakeet",
   "tts_enabled": true,
   "tts_voice": "Neural: en_US-lessac-high",
@@ -40,7 +40,7 @@
   "chat_thinking": "off",
   "barge_strictness": "normal",
   "wake_to_interrupt": false,
-  "instant_barge": true,
+  "instant_barge": false,
   "front_only": false,
   "voiceprint_enabled": false,
   "voiceprint_barge": false,

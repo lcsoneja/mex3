@@ -16,21 +16,22 @@
   --bad:#dc2626; --user:#7c3aed;
 }
 *{box-sizing:border-box}
-html,body{height:100%}
+html,body{height:100%;max-width:100%;overflow-x:hidden}
 body{margin:0;background:var(--bg);color:var(--text);font:13px/1.5 "Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
-.shell{display:grid;grid-template-rows:50px 1fr 30px;height:100vh}
+.shell{display:grid;grid-template-rows:auto minmax(0,1fr) auto;height:100vh;width:100%;max-width:100%;overflow-x:hidden}
 button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
-input,select{font:inherit;color:var(--text);background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:7px 10px}
+input,select{font:inherit;color:var(--text);background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:7px 10px;max-width:100%}
 input:focus,select:focus{outline:1px solid var(--accent)}
-.btn{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:5px 11px;font-size:12.5px;white-space:nowrap}
+.btn{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:4px 9px;font-size:12px;white-space:nowrap}
 .btn:hover{border-color:var(--accent)}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
 .btn.danger{border-color:var(--bad);color:var(--bad)}
-.pill{display:inline-block;padding:3px 10px;border:1px solid var(--line);border-radius:999px;font-size:11.5px;color:var(--dim);background:var(--bg2);white-space:nowrap}
+.pill{display:inline-block;padding:3px 9px;border:1px solid var(--line);border-radius:999px;font-size:11px;color:var(--dim);background:var(--bg2);white-space:nowrap}
 .pill.live{color:var(--accent);border-color:var(--accent)} .pill.ok{color:var(--ok);border-color:var(--ok)}
 .pill.warn{color:var(--warn);border-color:var(--warn)} .pill.num{font-variant-numeric:tabular-nums}
-/* topbar */
-.topbar{display:flex;align-items:center;gap:10px;padding:0 14px;border-bottom:1px solid var(--line);background:var(--bg2)}
+/* topbar — wraps cleanly with zero horizontal scrollbar */
+.topbar{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:6px 12px;min-height:46px;max-width:100%;border-bottom:1px solid var(--line);background:var(--bg2)}
+.topbar .btn,.topbar .pill{padding:3px 8px;font-size:11px}
 .brand{font-weight:700;font-size:14px} .brand i{color:var(--accent);font-style:normal}
 .topbar .grow{flex:1}
 #model-pop{position:absolute;top:46px;right:210px;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:8px;box-shadow:0 8px 30px rgba(0,0,0,.45);display:none;min-width:320px;max-height:50vh;overflow:auto;z-index:30}
@@ -57,9 +58,9 @@ input:focus,select:focus{outline:1px solid var(--accent)}
 /* main column */
 main{min-width:0;min-height:0;overflow:hidden;display:flex;flex-direction:column}
 section{min-height:0;display:flex;flex-direction:column;flex:1}
-.phead{display:flex;align-items:center;gap:9px;padding:10px 14px;border-bottom:1px solid var(--line)}
+.phead{display:flex;flex-wrap:wrap;align-items:center;gap:6px 9px;padding:9px 14px;border-bottom:1px solid var(--line);max-width:100%}
 .phead h2{margin:0;font-size:13.5px;font-weight:650}
-.pbody{flex:1;overflow:auto;padding:14px;min-height:0}
+.pbody{flex:1;overflow-y:auto;overflow-x:hidden;padding:14px;min-height:0;min-width:0;max-width:100%}
 /* chat */
 #transcript{flex:1;overflow:auto;padding:14px 16px;display:flex;flex-direction:column;gap:12px;min-height:0}
 .trow{display:grid;gap:6px;max-width:86%}
@@ -154,7 +155,7 @@ details.think .bd{padding:4px 12px 8px;max-height:200px;overflow:auto}
 .reaction{align-self:start;padding:3px 9px;color:var(--dim);font-size:11.5px}
 .reaction.liked{color:var(--accent);border-color:var(--accent)}
 /* statusbar */
-.statusbar{display:flex;align-items:center;gap:10px;padding:0 12px;border-top:1px solid var(--line);background:var(--bg2);font-size:11.5px;color:var(--dim)}
+.statusbar{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:4px 12px;min-height:30px;max-width:100%;border-top:1px solid var(--line);background:var(--bg2);font-size:11.5px;color:var(--dim)}
 .loading-pill{display:inline-flex;align-items:center;gap:7px;padding:2px 9px;border-radius:999px;border:1px solid var(--line);background:var(--panel);color:var(--dim);font-size:11px;min-width:0;max-width:340px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .loading-pill.busy{border-color:var(--accent);color:var(--text)}
 .dot-square{display:inline-grid;grid-template-columns:repeat(2,4px);grid-template-rows:repeat(2,4px);gap:3px;width:11px;height:11px;flex:none;align-items:center;justify-items:center}
@@ -239,7 +240,8 @@ details.think .bd{padding:4px 12px 8px;max-height:200px;overflow:auto}
 .vbar-row{display:flex;align-items:center;gap:6px;margin:3px 0;font-size:10px}
 .vbar-track{flex:1;height:6px;background:var(--bg);border:1px solid var(--line);border-radius:4px;overflow:hidden}
 .vbar-fill{display:block;height:100%;background:var(--accent);transition:width .2s}
-.lblock-row{display:flex;align-items:center;gap:8px;margin:4px 0;font-size:11px}
+.lblock-row{display:flex;align-items:center;gap:8px;margin:4px 0;font-size:11px;min-width:0;max-width:100%}
+.lblock-row>span{min-width:0;overflow:hidden;text-overflow:ellipsis}
 .lblock-bar{flex:1;height:14px;display:flex;border-radius:4px;overflow:hidden;background:var(--bg);border:1px solid var(--line)}
 .sys-nav{margin-top:auto;padding-top:6px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:2px}
 .pane{border:1px solid var(--line);border-radius:8px;background:var(--panel);display:flex;flex-direction:column;min-width:0;min-height:0}
@@ -284,13 +286,16 @@ details.think .bd{padding:4px 12px 8px;max-height:200px;overflow:auto}
 .qstrip .qcell.warn b{color:var(--warn)}
 .qstrip .qcell.bad b{color:var(--bad)}
 .perfgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.perfcard{border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:8px 10px}
+.perfcard{border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:8px 10px;min-width:0;max-width:100%}
 .perfcard h4{margin:0 0 5px;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim)}
-.perfcard canvas{width:100%;height:110px;background:var(--bg2);border-radius:6px}
+.perfcard canvas{width:100%;max-width:100%;height:110px;background:var(--bg2);border-radius:6px}
 .perfstat{font-size:10px;color:var(--dim);margin-top:4px}
 @media (max-width:1150px){.perfgrid{grid-template-columns:1fr}}
 /* documentation markdown */
-.md{font-size:12px;line-height:1.55;color:var(--text);max-width:900px}
+.md{font-size:12px;line-height:1.55;color:var(--text);max-width:100%}
+.md pre,.md table{max-width:100%}
+.md pre{white-space:pre-wrap;word-break:break-word}
+.md table{display:block;overflow-x:auto}
 .md h2{font-size:16px;margin:14px 0 6px;border-bottom:1px solid var(--line);padding-bottom:4px}
 .md h3{font-size:13.5px;margin:12px 0 4px;color:var(--accent)}
 .md h4,.md h5{font-size:12px;margin:10px 0 4px}
@@ -333,7 +338,7 @@ details.think .bd{padding:4px 12px 8px;max-height:200px;overflow:auto}
     <button class="btn danger" id="btn-barge" title="Stop / Interrupt Halfway: Immediately stops Nova from speaking, cancels the active LLM reply, drops queued audio, and returns to listening (keeps hands-free mic ON)." data-tip="Stop Reply Now: Immediately cuts Nova off mid-sentence or mid-thought, drops remaining TTS audio, cancels the in-flight LLM stream, and keeps your mic ready to listen.">■ Stop Reply</button>
     <button class="btn" id="btn-count" title="Interrupt Now: Nova is thinking or speaking. Click once to stop this reply immediately (or send text typed in the box)." data-tip="Interrupt Active Turn: Click once to stop Nova right now (or immediately send the text you typed in the input box).">⟳ Stop Reply<b id="count-secs"></b></button>
     <button class="pill wake" id="btn-wake" title="Wake Word Gate: OFF — Any voice starts a turn. ON — Nova waits until she hears her wake name (Nova or Piattos) before replying." data-tip="Wake Gate: OFF means any spoken sentence starts a turn. ON means Nova stays quiet from idle until you say 'Nova' or 'Piattos'.">wake: off</button>
-    <button class="pill wake on" id="btn-instant-barge" type="button" title="Auto-Interrupt (Speak While Nova Talks) is ON (Default). When you speak at any moment — even mid-reply or while thinking — Nova stops speaking, aborts her active LLM reply, and listens to you immediately. Click to turn OFF." data-tip="Auto-Interrupt: ON (Default) — Start talking at any moment (even mid-reply or mid-thought) and Nova immediately stops speaking/thinking and listens to you. OFF — Only stop words (stop, wait, cancel, pause) or ■ Stop Reply will interrupt.">🎙 Auto-Interrupt: ON</button>
+    <button class="pill wake" id="btn-instant-barge" type="button" title="Auto-Interrupt (Speak While Nova Talks) is OFF (Default). Normal talking over Nova will NOT interrupt; say a stop word (stop, wait, cancel, pause, quiet) or click ■ Stop Reply to interrupt. Click to turn ON." data-tip="Auto-Interrupt: OFF (Default) — Speaking over Nova will NOT cut her off unless you say a stop word (stop, wait, cancel, pause) or click ■ Stop Reply. ON — Start talking at any moment and Nova stops speaking/thinking immediately.">🎙 Auto-Interrupt: off</button>
     <button class="pill wake" id="btn-front-only" type="button" title="Front Agent Only is OFF (Full Team Active). Nova handles quick chat directly and delegates multi-step coding, research, or repair work to the 5 Back workers and Doctor. Click to turn Front Only ON." data-tip="Front Only Mode: OFF (Full Team) — Nova delegates multi-step tasks to 5 Back workers and repairs to Doctor. ON (Solo Front) — ONLY Nova answers every request directly; Back workers & Doctor are paused.">👤 Front Only: OFF</button>
     <button class="pill wake on" id="btn-aec" type="button" title="TTS Echo Canceller (Reference AEC) is ON (Default). Uses Nova's own TTS playback as a reference to adaptively subtract speaker echo from the mic so ASR stops hearing Nova's own voice. Click to turn OFF." data-tip="TTS Echo Canceller (AEC): ON (Default) — Subtracts Nova's own TTS speaker playback from the microphone before VAD & ASR while keeping your voice clear for interruptions. OFF — Disables TTS reference echo cancellation (use only with headphones).">🔇 TTS Echo Cancel: ON</button>
     <button class="pill wake on" id="btn-ns" type="button" title="Telecon Noise Suppression is ON (Default). Filters steady background room noise (fans, AC hum, typing) before VAD & ASR without suppressing human speech. Click to turn OFF." data-tip="Telecon Noise Suppression: ON (Default) — Continuously cleans steady room noise (cooling fans, AC hum, typing) before VAD and ASR so speech recognition stays accurate. OFF — Raw mic audio goes straight to VAD/ASR.">🌊 Noise Suppress: ON</button>
@@ -446,6 +451,16 @@ details.think .bd{padding:4px 12px 8px;max-height:200px;overflow:auto}
               <button class="btn" id="btn-perf-review" type="button">Review session</button>
             </div>
             <div id="perf-review-body" class="perfstat">—</div>
+          </div>
+          <div class="perfcard" id="perf-clf-card" style="margin-top:8px">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">
+              <h4 style="margin:0">Decision Classifier Performance (non-LLM · &lt;100 ms budget · +10% Front bias)</h4>
+              <span class="grow"></span>
+              <span class="pill ok" id="perf-clf-stage">rules-v1</span>
+            </div>
+            <div id="perf-clf-kpis" class="qstrip" style="margin-bottom:6px"></div>
+            <canvas id="chart-clf" width="840" height="80" style="width:100%;height:80px"></canvas>
+            <div class="lblock-row" style="margin-top:6px"><span style="min-width:85px;color:var(--dim)">Route share</span><div class="lblock-bar" id="perf-clf-bar"></div><span id="perf-clf-share" style="min-width:160px;text-align:right;font-size:10px;color:var(--dim)">—</span></div>
           </div>
           <div class="perfcard" style="margin-top:8px"><h4>Reply latency blocks (ASR · TTFT · LLM gen · TTS)</h4><div id="perf-blocks"></div></div>
           <div class="perfcard" style="margin-top:8px"><h4>Per-feature Memory &amp; CPU distribution</h4><div id="perf-dist"></div></div>
@@ -644,14 +659,14 @@ function renderWaveAndHeader(s){
       : "Wake Gate is OFF: Any speech starts a turn immediately. Click to require saying 'Nova' or 'Piattos' first.";
     bw.title = wtip; bw.setAttribute('data-tip', wtip);
   }
-  const ib = (s.settings || {}).instant_barge !== false;
+  const ib = Boolean((s.settings || {}).instant_barge);
   const bib = $('btn-instant-barge');
   if (bib){
     bib.textContent = '🎙 Auto-Interrupt: ' + (ib ? 'ON' : 'off');
     bib.className = 'pill wake' + (ib ? ' on' : '');
     const itip = ib
-      ? "Auto-Interrupt is ON (Default): As soon as you start speaking — even mid-reply or while thinking — Nova stops TTS playback, aborts her active LLM stream, and listens immediately. Click to switch OFF."
-      : "Auto-Interrupt is OFF: Talking over Nova will NOT interrupt unless you say a stop word (stop, wait, cancel, pause, quiet) or click ■ Stop Reply. Click to turn ON.";
+      ? "Auto-Interrupt is ON: As soon as you start speaking — even mid-reply or while thinking — Nova stops TTS playback, aborts her active LLM stream, and listens immediately. Click to switch back to OFF (default)."
+      : "Auto-Interrupt is OFF (Default): Talking over Nova will NOT cut her off unless you say a stop word (stop, wait, cancel, pause, quiet) or click ■ Stop Reply. Click to turn ON.";
     bib.title = itip; bib.setAttribute('data-tip', itip);
   }
   const fo = Boolean((s.settings || {}).front_only);
@@ -825,17 +840,23 @@ function renderInspector(s){
   const modelShort = String((s.settings || {}).model || '').split('/').pop();
 
   /* pane 1 — pipeline: the full stage set, 4 visible lines, scrollable */
-  const wg = Boolean((s.settings || {}).wake_gate);
+  const stg = s.settings || {};
+  const wg = Boolean(stg.wake_gate);
+  const aecOn = stg.echo_cancellation !== false;
+  const nsOn = stg.noise_suppression !== false;
+  const ibOn = Boolean(stg.instant_barge);
+  const foOn = Boolean(stg.front_only);
+  const clfLast = (s.classifier || {}).last || {};
   const stages = [
-    {k:'1 mic', on: Boolean(s.recording) || Number(s.level || 0) > 0.02,
-     d: s.recording ? 'capturing' : 'listening', lt:'level ' + Number(s.level || 0).toFixed(3)},
-    {k:'2 wake gate', on: Boolean(s.recording) && wg, d: wg ? 'armed (say Nova)' : 'off', lt:'mode ' + (s.mode || 'off')},
-    {k:'3 VAD', on: Number(s.level || 0) > 0.02, d: Number(s.level || 0) > 0.02 ? 'speech' : 'silence', lt:'threshold ' + ((s.settings || {}).vad_threshold || '-')},
+    {k:'1 mic · AEC/NS', on: Boolean(s.recording) || Number(s.level || 0) > 0.02,
+     d: (s.recording ? 'capturing' : 'listening') + ' · AEC ' + (aecOn ? 'ON' : 'off') + ' · NS ' + (nsOn ? 'ON' : 'off'), lt:'lvl ' + Number(s.level || 0).toFixed(3) + ' · erle ' + Number(s.echo_erle_db || 0).toFixed(0) + 'dB'},
+    {k:'2 gates', on: wg || ibOn || foOn, d: 'wake:' + (wg ? 'ON' : 'off') + ' · autoInt:' + (ibOn ? 'ON' : 'off') + ' · solo:' + (foOn ? 'ON' : 'off'), lt:'mode ' + (s.mode || 'off')},
+    {k:'3 VAD', on: Number(s.level || 0) > 0.02, d: Number(s.level || 0) > 0.02 ? 'speech' : 'silence', lt:'thr ' + (stg.vad_threshold || '-')},
     {k:'4 ASR', on: status === 'transcribing', d: status === 'transcribing' ? 'transcribing' : 'idle', lt:'asr ' + Math.round(last.asr_ms || 0) + ' ms'},
-    {k:'5 classifier', on: Boolean((s.classifier || {}).last), d: ((s.classifier || {}).last || {}).route || 'front', lt: Number((((s.classifier || {}).last || {}).latency_ms) || 0).toFixed(2) + ' ms (+10% bias)'},
+    {k:'5 classifier', on: Boolean(clfLast.route), d: (clfLast.route || 'front') + (foOn ? ' (solo)' : ''), lt: Number(clfLast.latency_ms || 0).toFixed(2) + ' ms (+10% bias)'},
     {k:'6 LLM + tools', on: status === 'thinking', d: status === 'thinking' ? 'reasoning' : 'idle', lt:'llm ' + Math.round(last.llm_ms || 0) + ' ms · ' + modelShort},
     {k:'7 TTS · mcp', on: speaking, d: speaking ? 'synthesising' : 'idle', lt:'tts ' + Math.round(last.tts_ms || 0) + ' ms'},
-    {k:'8 speaker', on: speaking, d: speaking ? 'playing' : 'idle', lt:'first audio ' + Math.round(last.ttfa_ms || 0) + ' ms · ack ' + Math.round(last.filler_ms || 0) + ' ms'}];
+    {k:'8 speaker', on: speaking, d: speaking ? 'playing' : 'idle', lt:'ttfa ' + Math.round(last.ttfa_ms || 0) + ' ms · ack ' + Math.round(last.filler_ms || 0) + ' ms'}];
   setKids($('tab-pipeline'), stages.map(x => el('div', {class:'pv' + (x.on ? ' on' : '')},
     el('span', {class:'k', text:x.k}), el('span', {class:'st', text:x.d}), el('span', {class:'lt', text:x.lt}))));
 
@@ -870,31 +891,38 @@ function renderInspector(s){
   /* pane 4 — agents: model + thinking controls, per-agent CoT, direct chat */
   renderAgentsPane(s, status, speaking);
 
-  /* pane 5 — workflow tree, live active highlighting from real pane/task state */
+  /* pane 5 — live SONJ4 workflow tree (mic -> AEC/NS -> VAD/ASR -> Classifier -> Front -> Back-1..5 / Doctor -> TTS) */
   const panes = s.pi_panes || {};
   const activeByRole = {};
   for (const a of (s.agents_active || [])) activeByRole[a.role || a.name] = a.state || 'idle';
-  const paneBusy = (r) => {
-    const pst = String((panes[r] || {}).status || 'idle');
-    return pst !== 'idle' && pst !== 'ready' && pst !== 'stopped';
+  const slotState = (r) => {
+    const pst = String((panes[r] || {}).status || '');
+    if (pst && pst !== 'idle' && pst !== 'ready' && pst !== 'stopped') return pst;
+    const act = activeByRole[r];
+    if (act && act !== 'idle' && act !== 'warm') return act;
+    return pst === 'ready' || act === 'warm' ? 'warm' : 'idle';
   };
-  const backState = paneBusy('back') ? String(panes.back.status) : (activeByRole.back && activeByRole.back !== 'idle' ? activeByRole.back : 'idle');
-  const resState = paneBusy('researcher') ? String(panes.researcher.status) : 'idle';
-  const critState = paneBusy('critic') ? String(panes.critic.status) : 'idle';
-  const sumState = paneBusy('summarizer') ? String(panes.summarizer.status) : 'idle';
-  const docState = paneBusy('doctor') ? String(panes.doctor.status) : (activeByRole.doctor && activeByRole.doctor !== 'idle' ? activeByRole.doctor : 'idle');
-  const toolN = Number(s.tools_running || 0);
+  const slotBusy = (st) => st !== 'idle' && st !== 'warm' && st !== 'ready' && st !== 'paused (solo)';
+  const clfSt = (s.classifier || {}).stats || {};
+  const clfRoute = clfLast.route || 'front';
+  const clfState = foOn ? 'front (SOLO)' : (clfRoute + ' · ' + Number(clfLast.latency_ms || clfSt.last_latency_ms || 0).toFixed(2) + 'ms');
+  const frontSt = speaking ? 'speaking' : (status === 'thinking' ? 'thinking' : 'idle');
+  const docRaw = slotState('doctor');
+  const docState = foOn ? 'paused (solo)' : docRaw;
+  const cleanLabel = (aecOn ? 'nlms-aec' : 'aec:off') + ' + ' + (nsOn ? 'wiener-ns' : 'ns:off');
   const wlines = [
-    ['you', s.recording ? 'listening' : 'idle', Boolean(s.recording)],
-    ['└ front', speaking ? 'speaking' : (status === 'thinking' ? 'thinking' : 'idle'), speaking || status === 'thinking'],
-    ['  └ router', activeByRole.router || (status === 'thinking' ? 'routing' : 'idle'), status === 'thinking'],
-    ['    └ tools', toolN ? 'running x' + toolN : 'idle', Boolean(toolN)],
-    ['      └ back', backState, backState !== 'idle'],
-    ['      └ researcher', resState, resState !== 'idle'],
-    ['      └ critic', critState, critState !== 'idle'],
-    ['      └ summarizer', sumState, sumState !== 'idle'],
-    ['      └ doctor', docState, docState !== 'idle'],
-    ['        └ voice', speaking ? 'speaking' : 'idle', speaking]];
+    ['you · mic', s.recording ? 'capturing' : (s.mode === 'continuous' ? 'listening' : 'idle'), Boolean(s.recording) || s.mode === 'continuous'],
+    ['├ audio cleanup', cleanLabel, aecOn || nsOn],
+    ['├ VAD + ASR', (status === 'transcribing' ? 'transcribing' : (s.mode || 'off')) + ' · autoInt:' + (ibOn ? 'ON' : 'off'), status === 'transcribing' || Boolean(s.recording)],
+    ['└ classifier (<100ms)', clfState, Boolean(clfLast.route) || status === 'thinking'],
+    ['  └ front (Nova)', foOn ? frontSt + ' [SOLO]' : frontSt, speaking || status === 'thinking'],
+    ...['back-1','back-2','back-3','back-4','back-5'].map(slot => {
+      const st = foOn ? 'paused (solo)' : slotState(slot);
+      return ['    ├ ' + slot, st, slotBusy(st)];
+    }),
+    ['    ├ doctor', docState, slotBusy(docState)],
+    ['    └ TTS · speaker', speaking ? 'speaking' : 'idle', speaking],
+  ];
   setKids($('tab-workflow'), wlines.map(x => {
     const row = el('div', {class:x[2] ? 'on' : 'dim'});
     row.append(el('span', {class:'dot' + (x[2] ? ((status === 'thinking' || speaking) ? ' busy' : ' on') : '')}));
@@ -908,8 +936,8 @@ function renderInspector(s){
   if (m.intent) mlines.push(['intent: ' + m.intent, false]);
   if (Array.isArray(m.tools)) for (const x of m.tools) mlines.push(['  ↳ tool: ' + (typeof x === 'string' ? x : (x.name || '?')), false]);
   if (!mlines.length){
-    mlines.push(['you', false], ['└ front', false], ['  └ router', false]);
-    for (const r of Object.keys(cfg)) mlines.push(['    ↳ ' + r + ' · ' + ((cfg[r] || {}).model || '—'), r === 'front' && status === 'thinking']);
+    mlines.push(['you · ' + cleanLabel, false], ['└ classifier (<100ms, +10% Front)', false], ['  └ front (Nova)', status === 'thinking']);
+    for (const r of Object.keys(cfg)) if (r !== 'front' && r !== 'classifier') mlines.push(['    ↳ ' + r + ' · ' + ((cfg[r] || {}).model || '—'), slotBusy(slotState(r))]);
   }
   setKids($('tab-mindmap'), mlines.map(x => el('div', {class:x[1] ? 'on' : 'dim', text:x[0]})));
 
@@ -943,9 +971,10 @@ function buildRoundTable(roles){
   /* one message, several agents answer in sequence (#7) */
   const box = el('div', {class:'rtbox'});
   box.append(el('b', {text:'round table — one message, many agents answer'}));
-  const picked = new Set(['researcher', 'critic']);
+  const llmRoles = roles.filter(r => r !== 'classifier');
+  const picked = new Set(llmRoles.includes('back-1') ? ['back-1', 'doctor'] : llmRoles.slice(0, 2));
   const chips = el('div', {class:'chips'});
-  for (const r of roles){
+  for (const r of llmRoles){
     const c = el('span', {class:'chip agent' + (picked.has(r) ? ' on' : ''), text:r});
     c.onclick = () => { if (picked.has(r)) picked.delete(r); else picked.add(r); c.classList.toggle('on', picked.has(r)); };
     chips.append(c);
@@ -984,6 +1013,15 @@ function renderAgentsPane(s, status, speaking){
       buildRoundTable(roles),
       roles.map(role => {
       const entry = cfg[role] || {};
+      if (role === 'classifier' || entry.kind === 'classifier'){
+        const cs = (s.classifier || {}).stats || {};
+        return el('div', {class:'agedit'},
+          el('div', {class:'rrow'},
+            el('div', {}, el('b', {text:'classifier'}), el('div', {class:'st', text:'non-LLM'})),
+            el('span', {class:'pill ok', text:'<100ms · +10% Front bias'}),
+            el('span', {class:'sub', text:(cs.calls || 0) + ' calls · p95 ' + Number(cs.p95_latency_ms || 0).toFixed(2) + 'ms'})),
+          el('div', {class:'desc', text:entry.description || 'Deterministic + ONNX decision classifier'}));
+      }
       const modelSel = modelSelect(entry.model, 'model for ' + role);
       modelSel.onchange = async () => { const r = await api('/api/set_role_model', {role, model:modelSel.value}); flashNote((r && r.message) || 'model updated'); };
       const lv = String(entry.thinking || 'medium');
@@ -1264,6 +1302,35 @@ async function renderPerformance(s){
     api('/api/performance/distribution'),
     api('/api/performance/review'),
   ]);
+  const clf = (dist && dist.classifier_perf) || ((s || state || {}).classifier || {}).stats || {};
+  const clfKpis = $('perf-clf-kpis');
+  const clfStage = $('perf-clf-stage');
+  if (clfStage) clfStage.textContent = (clf.stage || 'rules-v1') + (clf.onnx_ready ? ' + ONNX' : ' · non-LLM');
+  if (clfKpis){
+    const rts = clf.routes || {};
+    const totC = Math.max(1, Number(clf.calls || 0));
+    const fPct = clf.calls ? Math.round((Number(rts.front || 0) / totC) * 100) : 0;
+    const bPct = clf.calls ? Math.round((Number(rts.back || 0) / totC) * 100) : 0;
+    const dPct = clf.calls ? Math.round((Number(rts.doctor || 0) / totC) * 100) : 0;
+    const clfCells = [
+      ['calls', clf.calls || 0, ''],
+      ['p50 ms', Number(clf.p50_latency_ms || 0).toFixed(2), ''],
+      ['p95 ms', Number(clf.p95_latency_ms || 0).toFixed(2), Number(clf.p95_latency_ms || 0) >= 100 ? 'bad' : ''],
+      ['max ms', Number(clf.max_latency_ms || 0).toFixed(2), ''],
+      ['front share', fPct + '% (+10% bias)', ''],
+      ['back / doctor', bPct + '% / ' + dPct + '%', ''],
+      ['fallbacks', clf.fallbacks || 0, Number(clf.fallbacks || 0) > 0 ? 'warn' : ''],
+    ];
+    setKids(clfKpis, clfCells.map(x => el('div', {class:'qcell ' + x[2]}, el('b', {text:String(x[1])}), el('span', {text:x[0]}))));
+    const bar = $('perf-clf-bar');
+    if (bar){
+      const mk = (pct, col, lbl) => pct > 0 ? el('span', {style:'width:'+pct+'%;background:'+col, title:lbl+': '+pct+'%'}) : null;
+      bar.replaceChildren(...[mk(fPct,'#34d399','Front'), mk(bPct,'#60a5fa','Back Pool'), mk(dPct,'#f59e0b','Doctor')].filter(Boolean));
+    }
+    const sh = $('perf-clf-share');
+    if (sh) sh.textContent = 'Front ' + (rts.front || 0) + ' · Back ' + (rts.back || 0) + ' · Doctor ' + (rts.doctor || 0);
+  }
+  drawChart('chart-clf', (clf.recent_latencies || []).map(v => Math.max(0.01, Number(v || 0))), 'rgba(139,92,246,.9)');
   const rEl = $('perf-review-body');
   if (rEl && rev){
     rEl.replaceChildren(
@@ -1771,7 +1838,7 @@ function renderThinking(s){
    (model + thinking changed inline) and the crew studio (builder, canvas, resources,
    execution). Everything here reads the same /api/state the chat does. */
 const THINK_LEVELS = ['off','low','medium','high'];
-const CREW_TOOLS = ['get_time','set_timer','set_lights','get_weather','calculate','web_search','read_page','describe_image'];
+const CREW_TOOLS = ['classify_decision','delegate_task','ask_agent','start_crew','web_search','browse_page','device_tool','mcp_call'];
 let studioRoles = new Set();
 let dashBuilt = false;
 function kv2(value, label){ return el('div', {class:'kv2'}, el('b', {text:String(value)}), el('span', {text:label})); }
@@ -1864,6 +1931,13 @@ function rosterRows(s){
   const active = {}; for (const a of (s.agents_active||[])) active[a.role || a.name] = a.state || a.status || 'active';
   return Object.keys(cfg).map(role => {
     const entry = cfg[role] || {};
+    if (role === 'classifier' || entry.kind === 'classifier'){
+      const cs = (s.classifier || {}).stats || {};
+      return el('div', {class:'rrow'},
+        el('div', {}, el('b', {text:role}), el('div', {class:'st', text:'non-LLM'})),
+        el('span', {class:'pill ok', text:'<100ms · +10% Front bias'}),
+        el('span', {class:'sub', text:(cs.calls || 0) + ' calls · p95 ' + Number(cs.p95_latency_ms || 0).toFixed(2) + ' ms'}));
+    }
     const modelSel = modelSelect(entry.model, 'model for ' + role);
     modelSel.onchange = async () => { const r = await api('/api/set_role_model', {role, model:modelSel.value}); flashNote((r && r.message) || 'model updated'); };
     const lv = String(entry.thinking || 'medium');
@@ -2200,6 +2274,9 @@ function renderPaneModal(s){
 function renderLower(s){
   const box = $('lower'); if (!box) return;
   const feed = (s.thinking || []).filter(th => ['a2a','crew','gate','pi','fallback'].includes(String(th.kind || ''))).slice(-80);
+  const csBadge = $('lpane-state-community');
+  const clfLastLo = (s.classifier || {}).last || {};
+  if (csBadge) csBadge.textContent = clfLastLo.route ? ('clf→' + clfLastLo.route + ' ' + Number(clfLastLo.latency_ms || 0).toFixed(2) + 'ms') : 'feed';
   const cbody = $('lbody-community');
   if (cbody){
     setKids(cbody, feed.length
@@ -2571,7 +2648,7 @@ const _vu=$('btn-v-unlock'); if(_vu) _vu.onclick=async()=>{ await api('/api/voic
 const _vr=$('btn-v-reset'); if(_vr) _vr.onclick=async()=>{ await api('/api/voices/reset',{}); renderVoices(); };
 const _va=$('v-bg-always'); if(_va) _va.onchange=()=>api('/api/settings',{bg_voice_scan_always:Boolean(_va.checked)});
 const _bp0=$('chat-barge-pill'); if(_bp0) _bp0.onclick=()=>api('/api/settings',{wake_to_interrupt:!((state.settings||{}).wake_to_interrupt === true)});
-const _bib=$('btn-instant-barge'); if(_bib) _bib.onclick=async()=>{ const cur=(state.settings||{}).instant_barge !== false; const nxt=!cur; _bib.textContent='🎙 Auto-Interrupt: '+(nxt?'ON':'off'); _bib.className='pill wake'+(nxt?' on':''); await api('/api/settings',{instant_barge:nxt}); await poll(); };
+const _bib=$('btn-instant-barge'); if(_bib) _bib.onclick=async()=>{ const cur=Boolean((state.settings||{}).instant_barge); const nxt=!cur; _bib.textContent='🎙 Auto-Interrupt: '+(nxt?'ON':'off'); _bib.className='pill wake'+(nxt?' on':''); await api('/api/settings',{instant_barge:nxt}); await poll(); };
 const _bfo=$('btn-front-only'); if(_bfo) _bfo.onclick=async()=>{ const cur=Boolean((state.settings||{}).front_only); const nxt=!cur; _bfo.textContent='👤 Front Only: '+(nxt?'ON':'OFF'); _bfo.className='pill wake'+(nxt?' on':''); await api('/api/settings',{front_only:nxt}); await poll(); };
 const _btnAec=$('btn-aec'); if(_btnAec) _btnAec.onclick=async()=>{ const cur=(state.settings||{}).echo_cancellation !== false; const nxt=!cur; _btnAec.textContent='🔇 TTS Echo Cancel: '+(nxt?'ON':'off'); _btnAec.className='pill wake'+(nxt?' on':''); await api('/api/settings',{echo_cancellation:nxt}); await poll(); };
 const _btnNs=$('btn-ns'); if(_btnNs) _btnNs.onclick=async()=>{ const cur=(state.settings||{}).noise_suppression !== false; const nxt=!cur; _btnNs.textContent='🌊 Noise Suppress: '+(nxt?'ON':'off'); _btnNs.className='pill wake'+(nxt?' on':''); await api('/api/settings',{noise_suppression:nxt}); await poll(); };

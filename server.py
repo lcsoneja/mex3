@@ -742,7 +742,7 @@ class Settings:
         False  # False=natural (any real speech interrupts); True=stop-word only
     )
     instant_barge: bool = (
-        True  # Default ON: if user speaks, stop TTS + LLM and listen immediately
+        False  # Default OFF: when ON, speaking cuts TTS + LLM; when OFF, stop words or Stop Reply cut
     )
     front_only: bool = (
         False  # Toggle Solo Front mode: only Front answers (no Back/Doctor delegation)
@@ -3155,7 +3155,7 @@ class Session:
                         live_ring = live_ring[-560:]
                     if (
                         self.status == "thinking"
-                        and getattr(self.settings, "instant_barge", True)
+                        and getattr(self.settings, "instant_barge", False)
                         and self.settings.barge_in
                     ):
                         self._think_speech_ms += len(block) / 16.0
@@ -3229,7 +3229,7 @@ class Session:
                         continue
                     if (
                         self.status == "thinking"
-                        and getattr(self.settings, "instant_barge", True)
+                        and getattr(self.settings, "instant_barge", False)
                         and self.settings.barge_in
                         and rms >= max(0.03, self.settings.barge_rms)
                     ):
@@ -3928,7 +3928,7 @@ class Session:
                 self._think(f"you said {word!r} - stopping", "you")
                 return False
             words_tok = [t for t in re.findall(r"[a-zA-Z0-9']+", heard) if t]
-            instant = bool(getattr(self.settings, "instant_barge", True))
+            instant = bool(getattr(self.settings, "instant_barge", False))
             if (
                 instant
                 and not self.settings.wake_to_interrupt
@@ -4026,7 +4026,7 @@ class Session:
         # first "Task completed: {title}" line, no voice barge-in may cut it.
         if time.perf_counter() < getattr(self, "_protected_until", 0.0):
             return
-        instant = bool(getattr(self.settings, "instant_barge", True))
+        instant = bool(getattr(self.settings, "instant_barge", False))
         if not instant and not self.settings.wake_to_interrupt:
             # When Speak->Stop is explicitly toggled OFF, require a stop word instead of cutting on speech.
             pass
@@ -5668,9 +5668,13 @@ class Session:
                 "devices": self.device_summary(),
                 "echo_engine": getattr(self._echo, "name", "off"),
                 "echo_score": round(float(getattr(self._echo, "last_score", 0.0)), 3),
-                "echo_erle_db": round(float(getattr(self._echo, "last_erle_db", 0.0)), 1),
+                "echo_erle_db": round(
+                    float(getattr(self._echo, "last_erle_db", 0.0)), 1
+                ),
                 "ns_engine": getattr(self._ns, "name", "off"),
-                "ns_reduction_db": round(float(getattr(self._ns, "last_reduction_db", 0.0)), 1),
+                "ns_reduction_db": round(
+                    float(getattr(self._ns, "last_reduction_db", 0.0)), 1
+                ),
                 "quality": self.quality_stats(),
                 "startup_check": getattr(self, "startup_check", {}),
                 "voiceprint": {
@@ -5996,8 +6000,8 @@ class Session:
             full = full_path.read_text(encoding="utf-8")
         except OSError:
             full = (
-                "# SONJ documentation\n\nThe documentation file is missing "
-                "(sonj3/docs/SONJ_DOCUMENTATION.md)."
+                "# SONJ4 documentation\n\nThe documentation file is missing "
+                "(sonj4/docs/SONJ_DOCUMENTATION.md)."
             )
         return {"full": full, "summary": self._docs_summary()}
 
@@ -6019,7 +6023,8 @@ class Session:
             "## Pipeline",
             "",
             (
-                "mic → VAD (Silero) → ASR (sherpa-onnx) → Decision Classifier (<100ms, +10% Front bias) → "
+                "mic → Adaptive NLMS AEC (TTS ref) → Telecon Wiener NS → VAD (Silero) → "
+                "ASR (sherpa-onnx) → Decision Classifier (<100ms, +10% Front bias) → "
                 "FRONT (1) → Back Pool (5 always-warm: back-1..back-5) / Doctor (1) → TTS → speaker."
             ),
             (
@@ -6056,8 +6061,15 @@ class Session:
                 f"`{settings.tts_voice or settings.nova_voice}`"
             ),
             (
-                f"- Streamed speech: {'on' if settings.stream_voice else 'off'}; "
-                f"barge-in: {'on' if settings.barge_in else 'off'}"
+                f"- Audio front-end: TTS Echo Cancel ({getattr(self._echo, 'name', 'nlms-aec')}): "
+                f"{'ON' if settings.echo_cancellation else 'off'} · "
+                f"Telecon Noise Suppress ({getattr(self._ns, 'name', 'wiener-ns')}): "
+                f"{'ON' if getattr(settings, 'noise_suppression', True) else 'off'}"
+            ),
+            (
+                f"- Controls: Auto-Interrupt: {'ON' if getattr(settings, 'instant_barge', False) else 'off (default)'} · "
+                f"Front Only: {'ON' if getattr(settings, 'front_only', False) else 'off (default)'} · "
+                f"Streamed voice: {'on' if settings.stream_voice else 'off'}"
             ),
             f"- Paid models: {'enabled' if settings.paid_models_enabled else 'disabled (free + Copilot only)'}",
             "",
