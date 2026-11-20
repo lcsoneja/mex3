@@ -1,6 +1,6 @@
 # SONJ4 — Handoff
 
-Version: see `VERSION` (`4.0.0`). Read with `docs/INSTALL.md` and `docs/SONJ_DOCUMENTATION.md`.
+Version: see `VERSION` (`4.0.0`). Read with `docs/INSTALL.md`, `docs/SONJ_DOCUMENTATION.md`, and [`docs/RECENT_CHANGES.md`](RECENT_CHANGES.md) (exact diff & agent handoff log since `7a4310c`).
 
 ## Consolidated Agent & Audio Architecture
 
