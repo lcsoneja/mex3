@@ -224,7 +224,9 @@ def feature_distribution(session: Any) -> dict[str, Any]:
         {
             "name": f"TTS Echo Canceller ({getattr(aec_obj, 'name', 'nlms-aec')})",
             "mem_mb": 0.8,
-            "avg_ms": 0.3 if getattr(session.settings, "echo_cancellation", True) else 0.0,
+            "avg_ms": 0.3
+            if getattr(session.settings, "echo_cancellation", True)
+            else 0.0,
             "kind": "local DSP"
             if getattr(session.settings, "echo_cancellation", True)
             else "off",
@@ -232,7 +234,9 @@ def feature_distribution(session: Any) -> dict[str, Any]:
         {
             "name": f"Telecon Noise Suppressor ({getattr(ns_obj, 'name', 'wiener-ns')})",
             "mem_mb": 0.3,
-            "avg_ms": 0.25 if getattr(session.settings, "noise_suppression", True) else 0.0,
+            "avg_ms": 0.25
+            if getattr(session.settings, "noise_suppression", True)
+            else 0.0,
             "kind": "local DSP"
             if getattr(session.settings, "noise_suppression", True)
             else "off",
@@ -350,8 +354,7 @@ def feature_distribution(session: Any) -> dict[str, Any]:
             "ram_free_gb": round(
                 max(
                     0.0,
-                    float(sh.get("ram_total_gb", 0))
-                    - float(sh.get("ram_used_gb", 0)),
+                    float(sh.get("ram_total_gb", 0)) - float(sh.get("ram_used_gb", 0)),
                 ),
                 1,
             ),

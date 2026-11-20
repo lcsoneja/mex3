@@ -556,14 +556,23 @@ def run_live(port: int) -> int:
             overflow_issues: list[str] = []
             for vw, vh in ((1440, 900), (1280, 800)):
                 page.set_viewport_size({"width": vw, "height": vh})
-                for vname in ("chat", "dashboard", "performance", "pipeline", "docs", "settings"):
+                for vname in (
+                    "chat",
+                    "dashboard",
+                    "performance",
+                    "pipeline",
+                    "docs",
+                    "settings",
+                ):
                     page.click(f".rail button[data-view='{vname}']")
                     page.wait_for_timeout(200)
                     dims = page.evaluate(
                         "() => ({sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth})"
                     )
                     if int(dims["sw"]) > int(dims["cw"]):
-                        overflow_issues.append(f"{vw}x{vh}/{vname}:{dims['sw']}>{dims['cw']}")
+                        overflow_issues.append(
+                            f"{vw}x{vh}/{vname}:{dims['sw']}>{dims['cw']}"
+                        )
             check(
                 "live_zero_horizontal_scrollbar",
                 not overflow_issues and not js_errs,

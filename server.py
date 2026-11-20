@@ -741,9 +741,7 @@ class Settings:
     wake_to_interrupt: bool = (
         False  # False=natural (any real speech interrupts); True=stop-word only
     )
-    instant_barge: bool = (
-        False  # Default OFF: when ON, speaking cuts TTS + LLM; when OFF, stop words or Stop Reply cut
-    )
+    instant_barge: bool = False  # Default OFF: when ON, speaking cuts TTS + LLM; when OFF, stop words or Stop Reply cut
     front_only: bool = (
         False  # Toggle Solo Front mode: only Front answers (no Back/Doctor delegation)
     )
