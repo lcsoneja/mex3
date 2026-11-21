@@ -2,7 +2,7 @@
 
 SONJ4 consolidates the voice agent into **1 Front (`Nova`) + 1 non-LLM Decision Classifier (`<100 ms`, `+10%` Front bias) + 1 Doctor + 5 always-warm Back workers (`back-1..back-5`)**, paired with pure-NumPy **TTS-Reference Echo Cancellation (`nlms-aec`)** and **Telecon Noise Suppression (`wiener-ns`)** for Windows 10/11, Linux, Raspberry Pi 4/5, and macOS.
 
-> **Docs & install:** [`docs/INSTALL.md`](docs/INSTALL.md) · [`docs/HANDOFF.md`](docs/HANDOFF.md) · [`docs/RECENT_CHANGES.md`](docs/RECENT_CHANGES.md) · [`docs/SONJ_DOCUMENTATION.md`](docs/SONJ_DOCUMENTATION.md)
+> **Docs & install:** [`docs/INSTRUCTIONS.md`](docs/INSTRUCTIONS.md) · [`docs/Instructions.txt`](docs/Instructions.txt) · [`docs/BENCHMARK.md`](docs/BENCHMARK.md) · [`docs/INSTALL.md`](docs/INSTALL.md) · [`docs/HANDOFF.md`](docs/HANDOFF.md) · [`docs/RECENT_CHANGES.md`](docs/RECENT_CHANGES.md) · [`docs/SONJ_DOCUMENTATION.md`](docs/SONJ_DOCUMENTATION.md)
 
 ## Quick Start
 

@@ -38,7 +38,7 @@ from urllib.parse import urlparse
 import numpy as np
 
 from aec import EchoSuppressor, NoiseSuppressor
-from agent import Agent, ToolBoxLike
+from agent import Agent, ToolBoxLike, load_front_system_prompt
 from asr import AsrError, CloudAsr, create_asr, discover_models
 from audio import (
     AudioError,
@@ -51,22 +51,32 @@ from audio import (
     output_devices,
     probe_input_blocks,
 )
-from classifier import Decision, DecisionClassifier, DecisionRequest
+from classifier import (
+    DEFAULT_CLASSIFIER_BACKEND,
+    Decision,
+    DecisionClassifier,
+    DecisionRequest,
+    list_classifier_options,
+)
 from doctor import AGENTS as DOCTOR_AGENTS
 from doctor import CATALOGUE as DOCTOR_REPAIRS
 from doctor import SCOPES as DOCTOR_SCOPES
 from doctor import Doctor, engine_health, engine_processes
 from doctor import escalate as doctor_escalate
 from errors import BUS
+from github_auth import (
+    clear_github_token,
+    ensure_git_askpass,
+    github_auth_status,
+    load_github_token,
+    save_github_token,
+)
 from llm import (
     LlmError,
     create_llm,
     find_elevenlabs_key,
     find_openrouter_key,
-    list_ollama_models,
     list_openrouter_models,
-    loaded_ollama_models,
-    unload_ollama_model,
 )
 from mcp_client import McpClient
 from pi_rpc import PiPane, PiRpcError, list_pi_models
@@ -101,6 +111,7 @@ from voiceprint import Voiceprint
 BASE = Path(__file__).resolve().parent
 BACK_POOL: tuple[str, ...] = ("back-1", "back-2", "back-3", "back-4", "back-5")
 BACK_ALIASES = {"back", "researcher", "critic", "summarizer"}
+BACK_ONLY_MCP_SERVERS: frozenset[str] = frozenset({"github-mcp"})
 MODELS_DIR = BASE / "models"
 STATIC_DIR = BASE / "static"
 CONFIG_PATH = BASE / "config.json"
@@ -131,7 +142,132 @@ OPENROUTER_MODELS = [
 DEFAULT_MODEL = "rafw007/qwen35-claude-coder:9b"
 # Free, tool-verified OpenRouter model: costs nothing against a small credit cap.
 DEFAULT_OPENROUTER_MODEL = "nvidia/nemotron-3.5-lightning:free"
-MODELS_CACHE_S = 120.0
+MODELS_CACHE_S = 1800.0
+
+BUILTIN_BOOKMARKS: list[dict[str, Any]] = [
+    {
+        "id": "demo",
+        "name": "Demo Purpose",
+        "description": "Balanced & reliable live demo: Moonshine ASR, lessac-medium TTS, local-onnx classifier, AEC+NS ON, gpt-5.4-nano",
+        "settings": {
+            "provider": "github-copilot",
+            "model": "github-copilot/gpt-5.4-nano",
+            "asr_backend": "moonshine",
+            "classifier_backend": "local-onnx",
+            "tts_enabled": True,
+            "tts_voice": "Neural: en_US-lessac-medium",
+            "nova_voice": "Neural: en_US-lessac-medium",
+            "piattos_voice": "Neural: en_US-lessac-medium",
+            "front_uses_pi": True,
+            "tts_rate": 0,
+            "chat_thinking": "off",
+            "barge_strictness": "normal",
+            "front_only": False,
+            "instant_barge": False,
+            "echo_cancellation": True,
+            "noise_suppression": True,
+            "wake_gate": False,
+            "filler_enabled": True,
+            "fast_tool_replies": True,
+            "stream_voice": True,
+            "doctor_watch": True,
+            "idle_unload_s": 120,
+        },
+    },
+    {
+        "id": "high-speed",
+        "name": "High Speed",
+        "description": "Meets class targets on Pi 5: Moonshine (~210ms), amy-low (~355ms TTFB), direct streaming nemotron:free (~1.2s TTFT)",
+        "settings": {
+            "provider": "openrouter",
+            "model": "nvidia/nemotron-3.5-lightning:free",
+            "front_uses_pi": False,
+            "asr_backend": "moonshine",
+            "classifier_backend": "local-onnx",
+            "tts_enabled": True,
+            "tts_voice": "Neural: en_US-amy-low",
+            "nova_voice": "Neural: en_US-amy-low",
+            "piattos_voice": "Neural: en_US-amy-low",
+            "tts_rate": 2,
+            "chat_thinking": "off",
+            "barge_strictness": "relaxed",
+            "front_only": False,
+            "instant_barge": False,
+            "echo_cancellation": True,
+            "noise_suppression": True,
+            "wake_gate": False,
+            "filler_enabled": True,
+            "fast_tool_replies": True,
+            "stream_voice": True,
+            "idle_unload_s": 300,
+        },
+    },
+    {
+        "id": "high-thinking",
+        "name": "High Thinking",
+        "description": "Deep reasoning & accuracy: Parakeet ASR, gpt-6-luna, high thinking, OpenRouter Decider Flash classifier",
+        "settings": {
+            "provider": "github-copilot",
+            "front_uses_pi": True,
+            "model": "github-copilot/gpt-6-luna",
+            "asr_backend": "parakeet",
+            "classifier_backend": "openrouter/perplexity/pplx-decider-flash-v1.3:free",
+            "tts_enabled": True,
+            "tts_voice": "Neural: en_US-lessac-medium",
+            "nova_voice": "Neural: en_US-lessac-medium",
+            "piattos_voice": "Neural: en_US-lessac-medium",
+            "tts_rate": 0,
+            "chat_thinking": "high",
+            "barge_strictness": "normal",
+            "front_only": False,
+            "instant_barge": False,
+            "echo_cancellation": True,
+            "noise_suppression": True,
+            "doctor_watch": True,
+            "idle_unload_s": 180,
+        },
+    },
+    {
+        "id": "text-only",
+        "name": "Text Only (Fast Chat)",
+        "description": "Zero TTS wait (~2–3s text replies), Moonshine ASR, local-onnx, gpt-5.4-nano",
+        "settings": {
+            "provider": "github-copilot",
+            "front_uses_pi": True,
+            "model": "github-copilot/gpt-5.4-nano",
+            "asr_backend": "moonshine",
+            "classifier_backend": "local-onnx",
+            "tts_enabled": False,
+            "chat_thinking": "off",
+            "front_only": False,
+            "echo_cancellation": True,
+            "noise_suppression": True,
+        },
+    },
+    {
+        "id": "quality-voice",
+        "name": "Best Quality Voice",
+        "description": "Studio voice & multilingual ASR: Parakeet ASR, Kokoro af_heart/am_michael, gpt-6-luna (low thinking)",
+        "settings": {
+            "provider": "github-copilot",
+            "front_uses_pi": True,
+            "model": "github-copilot/gpt-6-luna",
+            "asr_backend": "parakeet",
+            "classifier_backend": "local-onnx",
+            "tts_enabled": True,
+            "tts_voice": "Neural: kokoro:af_heart",
+            "nova_voice": "Neural: kokoro:af_heart",
+            "piattos_voice": "Neural: kokoro:am_michael",
+            "tts_rate": 0,
+            "chat_thinking": "low",
+            "barge_strictness": "normal",
+            "front_only": False,
+            "echo_cancellation": True,
+            "noise_suppression": True,
+            "idle_unload_s": 180,
+        },
+    },
+]
 
 # Barge-in tuning. Without these guards the assistant hears its own speaker and
 # cuts itself off mid-sentence, which looks like the app is broken.
@@ -146,7 +282,7 @@ ECHO_SIMILARITY = 0.6
 # the echo ends, which can be a whole sentence later - so the window has to cover
 # a played-back sentence, not a moment.
 ECHO_WINDOW_S = 8.0
-FUZZY_ECHO_RATIO = 0.45
+FUZZY_ECHO_RATIO = 0.57
 INTERRUPT_GRACE_MS = 500.0
 DEFAULT_INTERRUPT_MIN_MS = 350.0
 LOG_PATH = BASE / "out" / "app.log"
@@ -298,31 +434,21 @@ def is_echo(
 
 
 def repair_provider_model(settings: Settings) -> Settings:
-    """Fix a stored model name that belongs to the other provider.
-
-    A provider switch used to pair the new provider with the old provider's model
-    name. Ollama answers an unknown id with HTTP 400, and because that error used
-    to be spoken aloud the microphone echoed it back as input - an endless loop.
-    """
-    if settings.provider != "ollama":
-        return settings
-    try:
-        available = list_ollama_models()
-    except LlmError as exc:
-        log_event(f"could not verify the configured model ({exc})")
-        return settings
-    if settings.model in available:
-        return settings
-    fallback = (
-        DEFAULT_MODEL
-        if DEFAULT_MODEL in available
-        else (available[0] if available else "")
+    """Enforce cloud-only LLM policy on Raspberry Pi (local Ollama LLMs are disabled)."""
+    settings.allow_local_llm = False
+    settings.router_enabled = False
+    ms = str(getattr(settings, "model", "") or "").strip()
+    is_ollama = (
+        settings.provider == "ollama"
+        or ms.startswith("ollama/")
+        or (":" in ms and "/" not in ms and not ms.endswith(":free"))
     )
-    if fallback:
+    if is_ollama:
         log_event(
-            f"model '{settings.model}' is not installed in Ollama - using '{fallback}'"
+            f"[policy] local Ollama model '{ms}' blocked on Raspberry Pi - using github-copilot/gpt-5.4-nano"
         )
-        settings.model = fallback
+        settings.provider = "github-copilot"
+        settings.model = "github-copilot/gpt-5.4-nano"
     return settings
 
 
@@ -666,7 +792,9 @@ class Settings:
 
     provider: str = "github-copilot"
     model: str = "github-copilot/gpt-5.4-nano"
-    asr_backend: str = "parakeet"
+    asr_backend: str = "moonshine"
+    classifier_backend: str = DEFAULT_CLASSIFIER_BACKEND
+    active_bookmark: str = "demo"
     tts_enabled: bool = True
     tts_voice: str = ""
     tts_rate: int = 0
@@ -695,7 +823,7 @@ class Settings:
     # acknowledgement and the turn's rough shape; fillers are pre-rendered clips that
     # play in ~0.4 ms; fast_tool_replies speaks a device command's own result instead of
     # paying for a second LLM round.
-    router_enabled: bool = True
+    router_enabled: bool = False
     router_model: str = DEFAULT_ROUTER_MODEL
     router_timeout_ms: float = 900.0
     filler_enabled: bool = True
@@ -767,8 +895,8 @@ class Settings:
 
     # Voice options and interruption words. Restored 2026-11-08 after an audit
     # showed the ledger had claimed them while the code no longer had them.
-    nova_voice: str = "Neural: kokoro:af_heart"
-    piattos_voice: str = "Neural: kokoro:am_michael"
+    nova_voice: str = "Neural: en_US-lessac-medium"
+    piattos_voice: str = "Neural: en_US-lessac-medium"
     barge_triggers: list[str] = field(default_factory=lambda: list(BARGE_TRIGGER_WORDS))
 
     def persistable(self) -> dict[str, Any]:
@@ -951,6 +1079,8 @@ class Session:
         self._last_activity = time.perf_counter()
         self._models_cache: dict[str, Any] | None = None
         self._models_cache_at = 0.0
+        self._models_refreshing = False
+        self._pi_models_refreshing = False
         self._doctor_gate = DoctorGate()
         self._mcp_clients: dict[str, McpClient] = {}
         self._mcp_lock = threading.Lock()
@@ -988,6 +1118,12 @@ class Session:
             name="recovery-announce",
         )
         self._recovery_thread.start()
+        if load_github_token():
+            threading.Thread(
+                target=lambda: github_auth_status(verify_remote=True),
+                daemon=True,
+                name="github-auth-warm",
+            ).start()
 
     # ---------------------------------------------------------------- devices
     def device_summary(self) -> dict[str, Any]:
@@ -1097,6 +1233,26 @@ class Session:
         rebuilds the task layer from it, and hot-swaps the conversation model so the next
         turn uses it without a restart.
         """
+        sanitized = {}
+        for rname, rentry in config.items():
+            if isinstance(rentry, dict):
+                rcopy = dict(rentry)
+                rm = str(rcopy.get("model") or "").strip()
+                if rm.startswith("ollama/") or (
+                    ":" in rm and "/" not in rm and not rm.endswith(":free")
+                ):
+                    log_event(
+                        f"[policy] blocked Ollama model {rm!r} in apply_agent_config for {rname}"
+                    )
+                    rcopy["model"] = (
+                        "github-copilot/gpt-5.4-nano"
+                        if rname == "front"
+                        else "github-copilot/gpt-6-luna"
+                    )
+                sanitized[rname] = rcopy
+            else:
+                sanitized[rname] = rentry
+        config = sanitized
         payload = json.dumps(config, indent=2) + "\n"
         for path in (AGENTS_PATH, ROOT_AGENTS_PATH):
             try:
@@ -1309,7 +1465,6 @@ class Session:
     def _role_system_prompt(self, role: str) -> str:
         """Role-specific instructions when running inside a live pi.dev terminal pane."""
         base_workspace = str(BASE.parent)
-        pool_list = ", ".join(BACK_POOL)
         en_rule = (
             "LANGUAGE: Always think, write, and reply in English by default — even if an audio "
             "transcript looks noisy, garbled, or resembles another language. Switch to another "
@@ -1323,32 +1478,12 @@ class Session:
             "2. Web Research: use device_tool(web_search, browse_page, read_page) or python sonj4/websearch.py; cite primary URLs/sources and dates; never guess facts. "
             "3. Critic / Verify: audit code, math, or documents against files and live sources; state explicit verdict (VERIFIED / SUSPICIOUS / FAILED) with concrete evidence. "
             "4. Summarize: distill findings cleanly while preserving facts and citations. "
-            "5. Peer Coordination: you can consult `doctor` or a sibling worker via ask_agent(...) and post updates directly to `community · agents talking` via post_community(...). "
-            "AUTHORITY & TOOLS: read, bash, powershell, edit, write, grep, find, ls, device_tool, mcp_call(computer-mcp|browser-mcp), ask_agent, post_community. Work autonomously — never ask the owner for approval."
+            "5. GitHub API (github-mcp, Back-only): you have exclusive access to mcp_call(server='github-mcp', ...) and pre-authenticated git CLI in bash. For creating public GitHub sample repos, reading/writing/editing repo files, branches, commits, issues, or PRs, use github-mcp tools (github_status, create_repo, get_repo, list_repos, get_file, create_or_update_file, edit_file, delete_file, create_branch, list_commits, create_issue, create_pull_request, api_request) and return exact URLs/paths. "
+            "6. Peer Coordination: you can consult `doctor` or a sibling worker via ask_agent(...) and post updates directly to `community · agents talking` via post_community(...). "
+            "AUTHORITY & TOOLS: read, bash, powershell, edit, write, grep, find, ls, device_tool, mcp_call(github-mcp|computer-mcp|browser-mcp|tasks-mcp|asr-mcp|tts-mcp|agents-mcp), ask_agent, post_community. Work autonomously — never ask the owner for approval."
         )
         prompts = {
-            "front": (
-                f"You are Nova, a warm, natural AI assistant voice agent in SONJ4 running on a Raspberry Pi or host workstation (workspace: {base_workspace}). "
-                + en_rule
-                + "CORE PROMPT RULES (v4): "
-                "Short, natural sentences; max 2 per turn. "
-                "If the user speaks, stop and listen immediately. "
-                "Confirm with the owner before costly, external, or irreversible actions. "
-                "Use MCP tools (asr-mcp, tts-mcp, tasks-mcp, and workspace tools) cleanly rather than guessing. "
-                "Never output or read markdown syntax (asterisks, hashes, backticks, bullet lists) or raw URLs aloud — paraphrase links into natural spoken words. "
-                + (
-                    "SOLO FRONT MODE IS ACTIVE: you are the ONLY agent answering. Resolve every request directly with your own reasoning and available tools; do NOT delegate to Back or Doctor. "
-                    if getattr(self.settings, "front_only", False)
-                    else (
-                        "COORDINATION & LATENCY BOUNDARY: "
-                        "(1) Handle quick conversational turns and single fast local tool calls directly (<2s). "
-                        f"(2) For multi-step, long-running, research, verification, synthesis, or workspace tasks, say 'Checking {{short task}}' first and hand off immediately via delegate_task(brief, role='back') to an idle worker in {pool_list} without asking unnecessary clarifying questions. "
-                        "(3) For app diagnostics, logs, or settings, delegate or ask 'doctor'. "
-                        "(4) Use non-LLM classify_decision(task) only when routing is genuinely uncertain. "
-                        "Always report plainly when delegated work completes, fails, or is cancelled."
-                    )
-                )
-            ),
+            "front": load_front_system_prompt(),
             "doctor": (
                 f"You are DOCTOR, the master SONJ4 architect, diagnostician, and settings authority (workspace: {base_workspace}). "
                 + en_rule
@@ -1528,14 +1663,10 @@ class Session:
                     and ":" in model
                 ):
                     continue
+                if ":" in model and "/" not in model and not model.endswith(":free"):
+                    continue
                 try:
-                    prov = (
-                        "ollama"
-                        if ":" in model
-                        and "/" not in model
-                        and not model.endswith(":free")
-                        else "openrouter"
-                    )
+                    prov = "openrouter"
                     llm = create_llm(
                         prov,
                         model,
@@ -1672,10 +1803,13 @@ class Session:
             log_event(f"could not persist the turn: {exc}")
 
     def classifier(self) -> DecisionClassifier:
-        """Non-LLM <100 ms Decision Classifier between the user and Front."""
+        """Decision Classifier between the user and Front (default local-onnx <1 ms)."""
         with self.lock:
             if self._classifier is None:
-                self._classifier = DecisionClassifier()
+                self._classifier = DecisionClassifier(
+                    backend=self.settings.classifier_backend,
+                    openrouter_key=self.settings.openrouter_key,
+                )
             return self._classifier
 
     def classify_decision(self, text: str) -> Decision:
@@ -1744,9 +1878,7 @@ class Session:
             return self._fillers
 
     def warm_extras(self) -> None:
-        """Render filler clips off the critical path."""
-        if not self.settings.filler_enabled and not self.settings.router_enabled:
-            return
+        """Render filler clips and pre-seed model catalogs off the critical path."""
 
         def run() -> None:
             if self.settings.filler_enabled:
@@ -1756,6 +1888,10 @@ class Session:
                     log_event(f"filler bank ready ({bank.load()} clips)")
                 except Exception as exc:  # noqa: BLE001 - never break the app
                     log_event(f"filler bank unavailable: {exc}")
+            try:
+                self.available_models(force=True)
+            except Exception as exc:  # noqa: BLE001
+                log_event(f"model catalog prewarm failed: {exc}")
 
         threading.Thread(target=run, daemon=True).start()
 
@@ -1921,12 +2057,12 @@ class Session:
                 provider = (
                     "openrouter" if self.settings.openrouter_key else "github-copilot"
                 )
-                model = "cohere/north-mini-code:free"
+                model = DEFAULT_OPENROUTER_MODEL
             if model.startswith("github-copilot/") or provider == "github-copilot":
                 # Direct HTTP Agent falls back to OpenRouter (never local Ollama when disabled).
                 if self.settings.openrouter_key:
                     provider = "openrouter"
-                    model = "cohere/north-mini-code:free"
+                    model = DEFAULT_OPENROUTER_MODEL
                 else:
                     raise LlmError(
                         "No OpenRouter key for direct fallback and local LLM is disabled."
@@ -1964,38 +2100,78 @@ class Session:
             self._agent_label = label
             return self._agent
 
+    def _refresh_models_async(self) -> None:
+        with self.lock:
+            if self._models_refreshing:
+                return
+            self._models_refreshing = True
+
+        def run() -> None:
+            try:
+                self.available_models(force=True)
+            except Exception as exc:  # noqa: BLE001
+                log_event(f"async model refresh failed: {exc}")
+            finally:
+                with self.lock:
+                    self._models_refreshing = False
+
+        threading.Thread(target=run, daemon=True, name="models-refresh").start()
+
+    def _refresh_pi_models_async(self) -> None:
+        with self.lock:
+            if self._pi_models_refreshing:
+                return
+            self._pi_models_refreshing = True
+
+        def run() -> None:
+            try:
+                models = list_pi_models(timeout_s=20.0)
+                with self.lock:
+                    if models:
+                        self._pi_models_cache = models
+                        self._pi_models_at = time.perf_counter()
+            except Exception as exc:  # noqa: BLE001
+                log_event(f"async pi models refresh failed: {exc}")
+            finally:
+                with self.lock:
+                    self._pi_models_refreshing = False
+
+        threading.Thread(target=run, daemon=True, name="pi-models-refresh").start()
+
     def available_models(self, force: bool = False) -> dict[str, Any]:
-        """Model ids per provider, cached - the UI polls state four times a second."""
+        """Model ids per provider, non-blocking stale-while-revalidate."""
         with self.lock:
             cached = self._models_cache
-            if (
-                cached is not None
-                and not force
-                and (time.perf_counter() - self._models_cache_at) < MODELS_CACHE_S
-            ):
+            age = time.perf_counter() - self._models_cache_at
+            if cached is not None and not force:
+                if age >= MODELS_CACHE_S:
+                    self._refresh_models_async()
                 return cached
-
-        ollama: list[str] = []
-        error = ""
-        if getattr(self.settings, "allow_local_llm", False):
-            try:
-                ollama = list_ollama_models()
-            except LlmError as exc:
-                error = str(exc)
+        if not force:
+            seed = {
+                "github-copilot": list(COPILOT_MODELS),
+                "ollama": [],
+                "openrouter": list(OPENROUTER_MODELS),
+                "ollama_error": "Local Ollama LLMs disabled on Raspberry Pi",
+            }
+            with self.lock:
+                if self._models_cache is None:
+                    self._models_cache = seed
+                    self._models_cache_at = 0.0
+            self._refresh_models_async()
+            return seed
 
         openrouter: list[str] = []
+        error = ""
         try:
-            # Free models are always listed. Paid models appear only once the owner
-            # has switched them on, so a demo cannot start billing by accident.
             openrouter = list_openrouter_models(
                 free_only=not bool(self.settings.paid_models_enabled)
             )
         except (LlmError, ValueError) as exc:
-            error = error or str(exc)
-        if not openrouter:  # offline: keep known ids so the dropdown still works
+            error = str(exc)
+        if not openrouter:
             openrouter = list(OPENROUTER_MODELS)
         else:
-            # Ensure fast verified defaults stay visible even if OpenRouter hides them momentarily.
             for preferred in OPENROUTER_MODELS:
                 if (
                     preferred.endswith(":free")
@@ -2012,7 +2188,7 @@ class Session:
 
         result = {
             "github-copilot": copilot,
-            "ollama": ollama,
+            "ollama": [],
             "openrouter": openrouter,
             "ollama_error": error,
         }
@@ -2023,11 +2199,12 @@ class Session:
 
     def _pi_models(self) -> list[dict[str, Any]]:
         with self.lock:
-            if (
-                self._pi_models_cache is not None
-                and (time.perf_counter() - self._pi_models_at) < MODELS_CACHE_S
-            ):
-                return self._pi_models_cache
+            cached = self._pi_models_cache
+            age = time.perf_counter() - self._pi_models_at
+            if cached is not None:
+                if age >= MODELS_CACHE_S:
+                    self._refresh_pi_models_async()
+                return cached
         models = list_pi_models(timeout_s=20.0)
         with self.lock:
             if models:
@@ -2123,7 +2300,7 @@ class Session:
         with contextlib.suppress(Exception):
             memories = self._toolbox.relevant_facts(text)
 
-        prompt_parts = [text]
+        prompt_parts = [f"Workspace: {BASE.parent}", text]
         if memories:
             prompt_parts.append(memories)
         if self._session_profile:
@@ -2145,6 +2322,14 @@ class Session:
             )
             if recap:
                 prompt_parts.append("Recent conversation:\n" + recap)
+        low_q = text.lower()
+        if any(
+            k in low_q
+            for k in ("stock", "share price", "ticker", "pse", "nasdaq", "nyse")
+        ):
+            prompt_parts.append(
+                "(stock lookup hint: call device_tool(name='get_stock_price', arguments={'symbol': '...'}) for accurate live quotes; do NOT guess from memory.)"
+            )
         if getattr(self.settings, "front_only", False):
             prompt_parts.append(
                 "(FRONT-ONLY MODE ACTIVE: You are the ONLY agent allowed to answer. Answer directly using your own reasoning and available tools — do NOT call delegate_task, ask_agent, or start_crew.)"
@@ -2316,8 +2501,10 @@ class Session:
         agent: Agent | None = None
         reply: Any = None
         used_pi_front = self._should_use_front_pi()
+        llm_started = time.perf_counter()
         try:
             try:
+                llm_started = time.perf_counter()
                 if used_pi_front:
                     reply = self._ask_front_pi(
                         text,
@@ -2542,7 +2729,13 @@ class Session:
             spoken_cut = pump.played_text() if pump is not None else ""
             if spoken_cut:
                 recorded = f"{spoken_cut} (cut off)"
-            elif not recorded:
+            elif recorded:
+                recorded = (
+                    recorded
+                    if "(cut off)" in recorded
+                    else f"{recorded[:120].rstrip()} (cut off)"
+                )
+            else:
                 recorded = "(cut off)"
             if pump is not None:
                 pump.stop()
@@ -2653,6 +2846,7 @@ class Session:
             started,
             model=reply.model,
             extra={
+                "first_token_ms_override": round(self._first_token_ms(llm_started), 1),
                 **stream_extras,
                 "tokens": int(getattr(reply, "tokens", 0) or 0),
                 "tok_per_s": (
@@ -2875,7 +3069,13 @@ class Session:
                     "asr_ms": round(asr_ms, 1),
                     "llm_ms": round(llm_ms, 1),
                     "tts_ms": round(tts_ms, 1),
-                    "first_token_ms": round(self._first_token_ms(started), 1),
+                    "first_token_ms": round(
+                        float(
+                            (extra or {}).get("first_token_ms_override")
+                            or self._first_token_ms(started)
+                        ),
+                        1,
+                    ),
                     "total_ms": round(total_ms, 1),
                     "filler_ms": round(self._filler_latency_ms(), 1),
                     "reply_audio_ms": round(self._reply_audio_ms(started), 1),
@@ -3293,16 +3493,8 @@ class Session:
             if self._vad is not None:
                 freed.append("vad")
                 self._vad = None
-            provider = self.settings.provider
 
-        if provider == "ollama":
-            try:
-                for entry in loaded_ollama_models():
-                    name = str(entry.get("name", ""))
-                    if name and unload_ollama_model(name):
-                        freed.append(f"ollama:{name}")
-            except LlmError as exc:
-                log_event(f"could not unload models: {exc}")
+        # Local Ollama LLMs are strictly disabled on Raspberry Pi.
 
         if freed:
             log_event(
@@ -4560,40 +4752,80 @@ class Session:
         return found
 
     def mcp_call(
-        self, server: str, tool: str, args: dict[str, Any] | None = None
+        self,
+        server: str,
+        tool: str,
+        args: dict[str, Any] | None = None,
+        caller_role: str = "",
     ) -> dict[str, Any]:
         """R14: call a tool on an MCP server (lazy connect, kept alive across calls)."""
+        clean_server = str(server or "").strip()
+        clean_role = str(caller_role or "").strip().lower()
+        if clean_server in BACK_ONLY_MCP_SERVERS and (
+            clean_role != "back" and clean_role not in BACK_POOL
+        ):
+            return {
+                "ok": False,
+                "error": (
+                    f"{clean_server} is restricted to Back agents (back-1..back-5); "
+                    "Front cannot call it directly — delegate GitHub tasks via delegate_task(brief, role='back')."
+                ),
+            }
         try:
             cfg = json.loads((BASE / "mcp_servers.json").read_text(encoding="utf-8"))
         except (OSError, ValueError) as exc:
             return {"ok": False, "error": f"mcp_servers.json unreadable: {exc}"}
         entry = next(
-            (s for s in cfg.get("servers", []) if s.get("name") == server), None
+            (s for s in cfg.get("servers", []) if s.get("name") == clean_server), None
         )
         if entry is None:
-            return {"ok": False, "error": f"unknown MCP server '{server}'"}
+            return {"ok": False, "error": f"unknown MCP server '{clean_server}'"}
         with self._mcp_lock:
-            client = self._mcp_clients.get(server)
+            client = self._mcp_clients.get(clean_server)
             if client is None or client.returncode is not None:
-                command = [
-                    str(BASE.parent / part)
-                    if str(part).endswith(".py")
-                    and not Path(part).is_absolute()
-                    and (BASE.parent / part).is_file()
-                    else part
-                    for part in entry["command"]
-                ]
-                client = McpClient(server, command)
+                command = []
+                for part in entry["command"]:
+                    text_part = str(part)
+                    if text_part in {"python", "python3"}:
+                        command.append(sys.executable)
+                    elif (
+                        text_part.endswith(".py") and not Path(text_part).is_absolute()
+                    ):
+                        if (BASE / text_part).is_file():
+                            command.append(str(BASE / text_part))
+                        elif (BASE.parent / text_part).is_file():
+                            command.append(str(BASE.parent / text_part))
+                        else:
+                            command.append(text_part)
+                    else:
+                        command.append(text_part)
+                client = McpClient(clean_server, command)
+                env_extra = {"ME3_ENGINE_URL": self.engine_url}
+                if clean_server == "github-mcp":
+                    tok = load_github_token()
+                    if tok:
+                        env_extra["GITHUB_TOKEN"] = tok
+                client.env = env_extra
                 try:
                     client.start()
                 except Exception as exc:  # noqa: BLE001
-                    return {"ok": False, "error": f"could not start {server}: {exc}"}
-                self._mcp_clients[server] = client
+                    return {
+                        "ok": False,
+                        "error": f"could not start {clean_server}: {exc}",
+                    }
+                self._mcp_clients[clean_server] = client
         try:
             result = client.call(tool, args or {})
         except Exception as exc:  # noqa: BLE001
-            return {"ok": False, "error": f"{server}.{tool} failed: {exc}"}
-        return {"ok": True, "server": server, "tool": tool, "result": result}
+            return {"ok": False, "error": f"{clean_server}.{tool} failed: {exc}"}
+        return {"ok": True, "server": clean_server, "tool": tool, "result": result}
+
+    def _reset_mcp_client(self, server: str) -> None:
+        with self._mcp_lock:
+            stale = self._mcp_clients.pop(server, None)
+        if stale is not None:
+            with contextlib.suppress(Exception):
+                stale.close()
 
     def mcp_status(self) -> dict:
         # MCP servers this engine can offer. Connect/disconnect still planned (R14).
@@ -4620,6 +4852,7 @@ class Session:
                 [
                     "tasks_info",
                     "get_time",
+                    "get_stock_price",
                     "set_timer",
                     "web_search",
                     "read_page",
@@ -4628,6 +4861,26 @@ class Session:
                 ],
             ),
             ("agents-mcp", "agents_mcp.py", ["list_agents", "ask_agent"]),
+            (
+                "github-mcp",
+                "github_mcp.py",
+                [
+                    "github_status",
+                    "repo_overview",
+                    "create_repo",
+                    "list_repos",
+                    "get_repo",
+                    "get_file",
+                    "create_or_update_file",
+                    "edit_file",
+                    "delete_file",
+                    "create_branch",
+                    "list_commits",
+                    "create_issue",
+                    "create_pull_request",
+                    "api_request",
+                ],
+            ),
         ):
             script = BASE / script
             if script.is_file():
@@ -4635,8 +4888,24 @@ class Session:
                     {
                         "name": name,
                         "transport": "stdio",
+                        "scope": "back-only"
+                        if name in BACK_ONLY_MCP_SERVERS
+                        else "front + back",
                         "script": str(script),
-                        "status": "available (started on demand by an MCP client)",
+                        "status": (
+                            (
+                                "signed in as @"
+                                + (github_auth_status().get("login") or "ready")
+                                + " (Back agents only)"
+                            )
+                            if name == "github-mcp"
+                            and github_auth_status().get("signed_in")
+                            else (
+                                "not signed in yet — open Settings -> GitHub API Auth or run sonj4 github-login"
+                                if name == "github-mcp"
+                                else "available (started on demand by an MCP client)"
+                            )
+                        ),
                         "tools": tools,
                     }
                 )
@@ -5157,6 +5426,11 @@ class Session:
         model_id = str(model).strip()
         if not wanted or not model_id:
             return "pick a role and a model first"
+        if model_id.startswith("ollama/") or (
+            ":" in model_id and "/" not in model_id and not model_id.endswith(":free")
+        ):
+            log_event(f"[policy] blocked Ollama role model {model_id!r} for {wanted}")
+            return "local Ollama LLMs are disabled on Raspberry Pi"
         with self.lock:
             roster = load_agents_config()
             if wanted not in roster:
@@ -5178,12 +5452,6 @@ class Session:
                 self.settings.model = model_id
                 if model_id.startswith("github-copilot/"):
                     self.settings.provider = "github-copilot"
-                elif (
-                    ":" in model_id
-                    and "/" not in model_id
-                    and not model_id.endswith(":free")
-                ):
-                    self.settings.provider = "ollama"
                 elif "/" in model_id:
                     self.settings.provider = "openrouter"
                 self._agent = None
@@ -5461,21 +5729,44 @@ class Session:
                 bridge_mode = "front"
                 if key == "front":
                     if ext_path.is_file():
-                        extra += ["-e", str(ext_path), "--no-builtin-tools"]
+                        extra += ["-e", str(ext_path)]
+                    agent_root = Path.home() / ".pi" / "agent"
+                    pi_front_exts = (
+                        agent_root
+                        / "npm"
+                        / "node_modules"
+                        / "pi-mcp-adapter"
+                        / "index.ts",
+                        agent_root
+                        / "npm"
+                        / "node_modules"
+                        / "pi-web-access"
+                        / "dist"
+                        / "index.js",
+                        agent_root / "npm" / "node_modules" / "pi-memory" / "index.ts",
+                        agent_root / "extensions" / "file-attacher" / "index.ts",
+                    )
+                    for pext in pi_front_exts:
+                        if pext.is_file():
+                            extra += ["-e", str(pext)]
+                    extra += ["-t", "+grep,+find,+ls"]
                 elif key in BACK_POOL or key.startswith("back"):
                     bridge_mode = "back"
                     if ext_path.is_file():
                         extra += ["-e", str(ext_path)]
                     extra += [
                         "-t",
-                        "read,bash,powershell,edit,write,grep,find,ls",
+                        "read,bash,powershell,edit,write,grep,find,ls,device_tool,mcp_call,post_community,ask_agent",
                     ]
                 elif key == "doctor":
                     # Doctor is read-only + doctor_app_control + peer community posts (no self-coding).
                     bridge_mode = "doctor"
                     if ext_path.is_file():
                         extra += ["-e", str(ext_path)]
-                    extra += ["-t", "read,grep,find,ls"]
+                    extra += [
+                        "-t",
+                        "read,grep,find,ls,doctor_app_control,post_community,ask_agent",
+                    ]
                 else:
                     extra += ["--no-tools"]
                 pane = PiPane(
@@ -5488,6 +5779,14 @@ class Session:
                         "ME3_ENGINE_URL": self.engine_url,
                         "ME3_BRIDGE_MODE": bridge_mode,
                         "SONJ_ROLE": key,
+                        **(
+                            {
+                                "GIT_ASKPASS": str(ensure_git_askpass()),
+                                "GIT_TERMINAL_PROMPT": "0",
+                            }
+                            if bridge_mode == "back"
+                            else {}
+                        ),
                     },
                     extra_args=extra,
                 )
@@ -5608,12 +5907,6 @@ class Session:
         task_summaries = self.tasks_manager().summaries()
         workflow = self.tasks_manager().graph()
         loaded: list[dict[str, Any]] = []
-        if self.settings.provider == "ollama":
-            try:
-                loaded = loaded_ollama_models()
-            except LlmError as exc:
-                loaded = []
-                log_event(f"could not list loaded models: {exc}")
         with self.lock:
             settings = self.settings.persistable()
             settings["openrouter_key_set"] = bool(self.settings.openrouter_key)
@@ -5645,6 +5938,10 @@ class Session:
                 "voices": self._voiceprint.dashboard(),
                 "gate_stats": dict(self._gate_stats),
                 "classifier": {
+                    "backend": self.settings.classifier_backend,
+                    "options": list_classifier_options(
+                        openrouter_key=self.settings.openrouter_key
+                    ),
                     "stats": dict(self.classifier().stats),
                     "last": self._last_decision,
                 },
@@ -5680,6 +5977,11 @@ class Session:
                     "model_present": self._voiceprint.model_present,
                 },
                 "session_profile": list(self._session_profile),
+                "github_auth": github_auth_status(),
+                "bookmarks": self.list_bookmarks(),
+                "active_bookmark": str(
+                    getattr(self.settings, "active_bookmark", "demo") or "demo"
+                ),
                 "cwd": str(BASE.parent),
                 "app_dir": str(BASE),
                 "tools": self.tool_names(),
@@ -5911,7 +6213,15 @@ class Session:
                     ],
                 },
                 "classifier": {
-                    "backend": f"{self.classifier().stats.get('stage', 'rules-v1')} (non-LLM, +10% Front bias)",
+                    "backend": f"{self.classifier().stats.get('stage', 'local-onnx')} (+10% Front bias)",
+                    "active": self.settings.classifier_backend,
+                    "onnx_ready": self.classifier().has_onnx(),
+                    "openrouter_key_set": bool(
+                        self.settings.openrouter_key or find_openrouter_key()
+                    ),
+                    "options": list_classifier_options(
+                        openrouter_key=self.settings.openrouter_key
+                    ),
                     "p50_ms": float(
                         self.classifier().stats.get("last_latency_ms") or 0.0
                     ),
@@ -6007,7 +6317,7 @@ class Session:
         """Summary built from agents.json + live settings, so it never drifts."""
         roster = load_agents_config()
         toolsets = {
-            "front": "classify_decision, ask_agent, delegate_task, start_crew, list_agents, device_tool (<2s only)",
+            "front": "read, bash, edit, write, grep, find, ls, mcp, mcp_call, web_search, fetch_content, memory_*, attach_files, device_tool, doctor_app_control, post_community, classify_decision, ask_agent, delegate_task, start_crew, list_agents",
             "doctor": "read, grep, find, ls, doctor_app_control, post_community, ask_agent (no self-coding)",
             "classifier": "non-LLM deterministic + ONNX slot (<100ms, +10% Front bias; zero pane tools)",
         }
@@ -6121,10 +6431,7 @@ class Session:
                     "tools": True,
                 }
             )
-        for mid in self.available_models().get("ollama", []):
-            catalog.append(
-                {"id": str(mid), "provider": "Ollama", "group": "Ollama", "free": True}
-            )
+        # Local Ollama models intentionally excluded (disabled on Raspberry Pi).
         # The owner's full collection: every OpenRouter model, not only the
         # tool-capable subset, so the picker is complete and searchable.
         try:
@@ -6243,12 +6550,149 @@ class Session:
         log_event(f"role {wanted} thinking -> {chosen}")
         return f"{wanted} will think {chosen} from its next turn"
 
+    def _custom_bookmarks_path(self) -> Path:
+        return OUT_DIR / "bookmarks.json"
+
+    def _load_custom_bookmarks(self) -> list[dict[str, Any]]:
+        path = self._custom_bookmarks_path()
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return []
+        if not isinstance(raw, list):
+            return []
+        out: list[dict[str, Any]] = []
+        for item in raw:
+            if (
+                isinstance(item, dict)
+                and item.get("id")
+                and isinstance(item.get("settings"), dict)
+            ):
+                out.append(
+                    {
+                        "id": str(item["id"]),
+                        "name": str(item.get("name") or item["id"]),
+                        "description": str(
+                            item.get("description") or "Custom saved bookmark"
+                        ),
+                        "builtin": False,
+                        "settings": dict(item["settings"]),
+                    }
+                )
+        return out
+
+    def list_bookmarks(self) -> list[dict[str, Any]]:
+        out: list[dict[str, Any]] = []
+        for b in BUILTIN_BOOKMARKS:
+            out.append({**b, "builtin": True})
+        out.extend(self._load_custom_bookmarks())
+        return out
+
+    def apply_bookmark(self, bookmark_id: str) -> dict[str, Any]:
+        wanted = str(bookmark_id or "").strip()
+        match = next((b for b in self.list_bookmarks() if b["id"] == wanted), None)
+        if match is None:
+            return {"ok": False, "error": f"unknown bookmark '{wanted}'"}
+        patch = dict(match.get("settings") or {})
+        patch["active_bookmark"] = wanted
+        patch["allow_local_llm"] = False
+        patch["router_enabled"] = False
+        self.update_settings(patch)
+        self._think(f"applied bookmark: {match['name']}", "roster")
+        return {"ok": True, "id": wanted, "name": match["name"]}
+
+    def save_bookmark(self, name: str, description: str = "") -> dict[str, Any]:
+        clean = " ".join(str(name or "").split())[:48]
+        if not clean:
+            return {"ok": False, "error": "bookmark name is required"}
+        slug = re.sub(r"[^a-z0-9]+", "-", clean.lower()).strip("-") or "custom"
+        if any(b["id"] == slug for b in BUILTIN_BOOKMARKS):
+            slug = f"custom-{slug}"
+        keys = (
+            "model",
+            "provider",
+            "asr_backend",
+            "classifier_backend",
+            "tts_enabled",
+            "tts_voice",
+            "nova_voice",
+            "piattos_voice",
+            "tts_rate",
+            "chat_thinking",
+            "barge_strictness",
+            "front_only",
+            "instant_barge",
+            "echo_cancellation",
+            "noise_suppression",
+            "wake_gate",
+            "wake_to_interrupt",
+            "filler_enabled",
+            "fast_tool_replies",
+            "stream_voice",
+            "doctor_watch",
+            "idle_unload_s",
+            "paid_models_enabled",
+        )
+        snap = self.settings.persistable()
+        saved_settings = {k: snap[k] for k in keys if k in snap}
+        saved_settings["allow_local_llm"] = False
+        saved_settings["router_enabled"] = False
+        custom = [b for b in self._load_custom_bookmarks() if b["id"] != slug]
+        custom.append(
+            {
+                "id": slug,
+                "name": clean,
+                "description": description
+                or f"{snap.get('asr_backend')}, {snap.get('tts_voice')}, {snap.get('model')}",
+                "builtin": False,
+                "settings": saved_settings,
+            }
+        )
+        OUT_DIR.mkdir(parents=True, exist_ok=True)
+        self._custom_bookmarks_path().write_text(
+            json.dumps(custom, indent=2), encoding="utf-8"
+        )
+        self.update_settings({"active_bookmark": slug})
+        return {"ok": True, "id": slug, "name": clean}
+
+    def delete_bookmark(self, bookmark_id: str) -> dict[str, Any]:
+        wanted = str(bookmark_id or "").strip()
+        if any(b["id"] == wanted for b in BUILTIN_BOOKMARKS):
+            return {"ok": False, "error": "cannot delete built-in bookmark"}
+        custom = [b for b in self._load_custom_bookmarks() if b["id"] != wanted]
+        OUT_DIR.mkdir(parents=True, exist_ok=True)
+        self._custom_bookmarks_path().write_text(
+            json.dumps(custom, indent=2), encoding="utf-8"
+        )
+        if getattr(self.settings, "active_bookmark", "") == wanted:
+            self.update_settings({"active_bookmark": "custom"})
+        return {"ok": True, "id": wanted}
+
     def update_settings(self, patch: dict[str, Any]) -> None:
         allowed = set(Settings().__dataclass_fields__)
         with self.lock:
             for key, value in patch.items():
-                if key in allowed and value is not None:
-                    setattr(self.settings, key, value)
+                if key not in allowed or value is None:
+                    continue
+                if key in {"allow_local_llm", "router_enabled"}:
+                    setattr(self.settings, key, False)
+                    continue
+                if key == "provider" and str(value).strip().lower() == "ollama":
+                    log_event("[policy] local Ollama LLMs are disabled on Raspberry Pi")
+                    continue
+                if key == "model":
+                    ms = str(value).strip()
+                    is_ollama = ms.startswith("ollama/") or (
+                        ":" in ms and "/" not in ms and not ms.endswith(":free")
+                    )
+                    if is_ollama:
+                        log_event(
+                            f"[policy] blocked Ollama model {ms!r} on Raspberry Pi"
+                        )
+                        continue
+                setattr(self.settings, key, value)
+            self.settings.allow_local_llm = False
+            self.settings.router_enabled = False
             if "paid_models_enabled" in patch:
                 self._models_cache = None
                 self._catalog_cache = None
@@ -6260,8 +6704,6 @@ class Session:
                 k in patch
                 for k in ("deepgram_api_key", "openai_api_key", "elevenlabs_api_key")
             ):
-                # Cloud engines cache their key at build time: drop them so the
-                # next call rebuilds with the new key.
                 self._tts_engines = {
                     k: v
                     for k, v in self._tts_engines.items()
@@ -6270,28 +6712,42 @@ class Session:
                 self._tts_wanted = ""
                 self._asr = None
             if "tts_voice" in patch or "tts_enabled" in patch or "tts_cloud" in patch:
-                # Invalidate FIRST, then reload: prewarm only fills an empty cache, so
-                # wiping afterwards left tts_voices empty until the next reboot.
                 self._voices_cache = None
-                self._prewarm_voices()  # reload the list with the new voice
-            if "model" in patch:
+                self._prewarm_voices()
+                if (
+                    self.settings.tts_enabled
+                    and not self.settings.tts_simulate
+                    and self.mode == "off"
+                ):
+                    with contextlib.suppress(TtsError):
+                        self._tts = self._build_tts(self.settings.tts_voice or "")
+                        self._tts_wanted = self.settings.tts_voice or ""
+            if "model" in patch or "chat_thinking" in patch:
                 chosen = str(self.settings.model or "")
                 if chosen.startswith("github-copilot/"):
                     self.settings.provider = "github-copilot"
-                elif (
-                    ":" in chosen and "/" not in chosen and not chosen.endswith(":free")
-                ):
-                    self.settings.provider = "ollama"
                 elif "/" in chosen and "provider" not in patch:
                     self.settings.provider = "openrouter"
                 pane = self._pi_panes.get("front")
-                if pane is not None and chosen:
+                if pane is not None:
                     with contextlib.suppress(Exception):
-                        pane.configure(model=chosen)
+                        pane.configure(
+                            model=chosen if "model" in patch and chosen else None,
+                            thinking=str(self.settings.chat_thinking or "off")
+                            if "chat_thinking" in patch
+                            else None,
+                        )
             if "provider" in patch or "model" in patch or "front_only" in patch:
                 self._agent = None
             if "asr_backend" in patch:
                 self._asr = None
+            if (
+                "classifier_backend" in patch or "openrouter_key" in patch
+            ) and self._classifier is not None:
+                self._classifier.set_backend(
+                    self.settings.classifier_backend,
+                    openrouter_key=self.settings.openrouter_key,
+                )
         if "front_only" in patch:
             with self._pi_lock:
                 stale = self._pi_panes.pop("front", None)
@@ -6449,6 +6905,10 @@ def _handler_factory(session: Session):
                 return
             if route == "/api/mcp":
                 self._send_json(session.mcp_status())
+                return
+            if route == "/api/github/status":
+                verify = "verify=1" in (urlparse(self.path).query or "")
+                self._send_json(github_auth_status(verify_remote=verify))
                 return
             if route == "/api/map":
                 mapper = getattr(session, "request_map", None)
@@ -6621,8 +7081,30 @@ def _handler_factory(session: Session):
                         body.get("arguments")
                         if isinstance(body.get("arguments"), dict)
                         else {},
+                        caller_role=str(body.get("from_role") or ""),
                     )
                 )
+                return
+            if route == "/api/github/auth":
+                tok = str(body.get("token") or "").strip()
+                if not tok:
+                    self._send_json(
+                        {"ok": False, "error": "token is required"}, status=400
+                    )
+                    return
+                try:
+                    info = save_github_token(tok)
+                    session._reset_mcp_client("github-mcp")
+                    log_event(f"GitHub API signed in as @{info.get('login', '?')}")
+                    self._send_json(info)
+                except ValueError as exc:
+                    self._send_json({"ok": False, "error": str(exc)}, status=400)
+                return
+            if route == "/api/github/logout":
+                info = clear_github_token()
+                session._reset_mcp_client("github-mcp")
+                log_event("GitHub API signed out")
+                self._send_json(info)
                 return
             if route == "/api/tool":
                 name = str(body.get("name") or "").strip()
@@ -6837,6 +7319,20 @@ def _handler_factory(session: Session):
             if route == "/api/settings":
                 session.update_settings(body)
                 self._send_json({"ok": True})
+                return
+            if route == "/api/bookmarks/apply":
+                res = session.apply_bookmark(str(body.get("id") or ""))
+                self._send_json(res, status=200 if res.get("ok") else 400)
+                return
+            if route == "/api/bookmarks/save":
+                res = session.save_bookmark(
+                    str(body.get("name") or ""), str(body.get("description") or "")
+                )
+                self._send_json(res, status=200 if res.get("ok") else 400)
+                return
+            if route == "/api/bookmarks/delete":
+                res = session.delete_bookmark(str(body.get("id") or ""))
+                self._send_json(res, status=200 if res.get("ok") else 400)
                 return
             if route == "/api/send":
                 text = str(body.get("text") or "")
@@ -7080,6 +7576,8 @@ def load_settings() -> Settings:
     override_backend = os.environ.get("ME3_ASR_BACKEND", "").strip()
     if override_backend:
         settings.asr_backend = override_backend
+    settings.allow_local_llm = False
+    settings.router_enabled = False
     settings = repair_provider_model(settings)
     settings.barge_rms = clamp_barge_rms(settings.barge_rms)
     return settings
@@ -7169,18 +7667,11 @@ def _selftest() -> int:
         )
 
     live = load_settings()
-    if live.provider == "ollama":
-        try:
-            installed = list_ollama_models()
-        except LlmError as exc:
-            installed = []
-            print(f"  [SKIP] cannot list Ollama models: {exc}")
-        if installed:
-            ok = live.model in installed
-            failures += 0 if ok else 1
-            print(
-                f"  [{'PASS' if ok else 'FAIL'}] stored model '{live.model}' exists in Ollama"
-            )
+    ok_no_ollama = (live.provider != "ollama") and (not live.allow_local_llm)
+    failures += 0 if ok_no_ollama else 1
+    print(
+        f"  [{'PASS' if ok_no_ollama else 'FAIL'}] local Ollama LLMs disabled (provider={live.provider})"
+    )
     ok = live.barge_rms >= MIN_BARGE_RMS
     failures += 0 if ok else 1
     print(
@@ -7439,9 +7930,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="SONJ4 voice agent")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8766)
-    parser.add_argument(
-        "--provider", choices=["ollama", "openrouter", "github-copilot"]
-    )
+    parser.add_argument("--provider", choices=["openrouter", "github-copilot"])
     parser.add_argument("--model")
     parser.add_argument("--asr", choices=["whisper", "moonshine", "parakeet"])
     parser.add_argument("--no-tts", action="store_true")

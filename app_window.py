@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import subprocess
 import sys
 import threading
@@ -35,6 +36,11 @@ BROWSERS = (
     Path(r"C:\Program Files\Microsoft\Edge\Application\msedge.exe"),
     Path(r"C:\Program Files\Google\Chrome\Application\chrome.exe"),
     Path(r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"),
+    Path("/usr/bin/chromium"),
+    Path("/usr/bin/chromium-browser"),
+    Path("/usr/bin/google-chrome"),
+    Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
+    Path("/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"),
 )
 
 # The Edge WebView2 runtime pywebview needs on Windows. Per-machine and per-user keys.
@@ -46,15 +52,22 @@ WEBVIEW2_KEYS = (
 
 def webview2_version() -> str:
     """Installed Edge WebView2 runtime version, or "" when it is absent or non-Windows."""
+    if sys.platform != "win32":
+        return ""
     try:
         import winreg
     except ImportError:  # not Windows (e.g. the Pi): there is no WebView2 runtime
         return ""
 
+    hklm = getattr(winreg, "HKEY_LOCAL_MACHINE", None)
+    open_key = getattr(winreg, "OpenKey", None)
+    query_value = getattr(winreg, "QueryValueEx", None)
+    if not (hklm and open_key and query_value):
+        return ""
     for key in WEBVIEW2_KEYS:
         try:
-            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, key) as handle:
-                return str(winreg.QueryValueEx(handle, "pv")[0])
+            with open_key(hklm, key) as handle:
+                return str(query_value(handle, "pv")[0])
         except OSError:
             continue
     return ""
@@ -72,12 +85,24 @@ def pywebview_version() -> str:
 
 def browser_path() -> Path | None:
     """The first usable Chromium browser, for the app-mode fallback."""
-    return next((exe for exe in BROWSERS if exe.exists()), None)
+    found = next((exe for exe in BROWSERS if exe.exists()), None)
+    if found:
+        return found
+    for name in ("chromium", "chromium-browser", "google-chrome", "msedge"):
+        which = shutil.which(name)
+        if which:
+            return Path(which)
+    return None
 
 
 def native_ready() -> bool:
     """Can we open a real native window (pywebview + WebView2)?"""
     return bool(pywebview_version()) and bool(webview2_version())
+
+
+def window_ready() -> bool:
+    """Can we open the full web console in a standalone window (native or Chromium app mode)?"""
+    return native_ready() or browser_path() is not None
 
 
 def report(port: int) -> int:
@@ -174,22 +199,23 @@ def open_native(url: str) -> bool:
 
 def open_app_mode(url: str) -> bool:
     """Chromium app-mode window: no tabs, no address bar, still a browser process."""
-    for exe in BROWSERS:
-        if exe.exists():
-            log(f"using {exe.name} in app mode")
-            subprocess.Popen(
-                [
-                    str(exe),
-                    f"--app={url}",
-                    f"--window-size={WINDOW[0]},{WINDOW[1]}",
-                    "--no-first-run",
-                    "--no-default-browser-check",
-                ],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-            )
-            return True
+    exe = browser_path()
+    if exe:
+        log(f"using {exe.name} in app mode")
+        proc = subprocess.Popen(
+            [
+                str(exe),
+                f"--app={url}",
+                f"--window-size={WINDOW[0]},{WINDOW[1]}",
+                "--no-first-run",
+                "--no-default-browser-check",
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        proc.wait()
+        return True
     return False
 
 

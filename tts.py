@@ -10,8 +10,11 @@ from __future__ import annotations
 
 import contextlib
 import os
+import platform
 import queue
 import re
+import shutil
+import subprocess
 import sys
 import threading
 import time
@@ -153,7 +156,9 @@ KOKORO_VOICE_IDS = {
     "am_michael": 17,
 }
 KOKORO_PERSONA_PREFIX = NEURAL_PREFIX + "kokoro:"
-NEURAL_THREADS = 4
+NEURAL_THREADS = (
+    2 if platform.machine().lower() in {"aarch64", "arm64", "armv7l"} else 4
+)
 
 # Pre-rendered acknowledgements. Short on purpose: they cover the thinking gap, they are
 # not the answer. router.FILLER_FOR chooses which key suits the turn.
@@ -343,7 +348,19 @@ class NeuralTts:
         self._worker: threading.Thread | None = None
         self._speaking = False
         self._lock = threading.Lock()
+        self._use_espeak_frontend = False
         self._load()
+        try:
+            import sherpa_onnx
+
+            if (
+                str(getattr(sherpa_onnx, "__version__", "")).startswith("2.")
+                and (shutil.which("espeak-ng") or shutil.which("espeak"))
+                and hasattr(sherpa_onnx, "GenerationConfig")
+            ):
+                self._use_espeak_frontend = True
+        except (ImportError, AttributeError) as exc:
+            log(f"[tts] espeak frontend check skipped: {exc}")
 
     @staticmethod
     def _parse_sid(voice: str | None) -> int:
@@ -374,14 +391,23 @@ class NeuralTts:
 
         cand = self._current
         if cand["kind"] == "kokoro":
-            model = sherpa_onnx.OfflineTtsKokoroModelConfig(
-                model=str(cand["model"]),
-                voices=str(cand["voices"]),
-                tokens=str(cand["tokens"]),
-                data_dir=str(cand["data_dir"]),
-                dict_dir=str(cand["dict_dir"]) if cand.get("dict_dir") else "",
-                lang=str(cand.get("lang") or "en-us"),
-            )
+            kokoro_kwargs: dict[str, Any] = {
+                "model": str(cand["model"]),
+                "voices": str(cand["voices"]),
+                "tokens": str(cand["tokens"]),
+                "data_dir": str(cand["data_dir"]),
+                "dict_dir": str(cand["dict_dir"]) if cand.get("dict_dir") else "",
+                "lang": str(cand.get("lang") or "en-us"),
+            }
+            if not (shutil.which("espeak-ng") or shutil.which("espeak")):
+                lexs = [
+                    str(cand["model"].parent / fn)
+                    for fn in ("lexicon-us-en.txt", "lexicon-zh.txt")
+                    if (cand["model"].parent / fn).is_file()
+                ]
+                if lexs:
+                    kokoro_kwargs["lexicon"] = ",".join(lexs)
+            model = sherpa_onnx.OfflineTtsKokoroModelConfig(**kokoro_kwargs)
             engine_kwargs = {"kokoro": model}
         else:
             model = sherpa_onnx.OfflineTtsVitsModelConfig(
@@ -442,13 +468,62 @@ class NeuralTts:
         self._worker = threading.Thread(target=self._stream, args=(text,), daemon=True)
         self._worker.start()
 
+    @staticmethod
+    def _espeak_codepoints(sentence: str) -> list[list[int]] | None:
+        espeak_bin = shutil.which("espeak-ng") or shutil.which("espeak")
+        if not espeak_bin:
+            return None
+        try:
+            ipa = subprocess.check_output(
+                [espeak_bin, "-q", "-v", "en-us", "--ipa", sentence],
+                text=True,
+                stderr=subprocess.DEVNULL,
+                timeout=5,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return None
+        clean = " ".join(
+            line.strip() for line in ipa.splitlines() if line.strip()
+        ).replace("\u200d", "")
+        if not clean:
+            return None
+        return [[ord(ch) for ch in clean]]
+
+    def _render_with_espeak(self, sentence: str):
+        import sherpa_onnx
+
+        gc_cls = getattr(sherpa_onnx, "GenerationConfig", None)
+        if gc_cls is None:
+            return None
+        codepoints = self._espeak_codepoints(sentence)
+        if not codepoints:
+            return None
+        gc = gc_cls()
+        gc.sid = self._sid
+        gc.speed = self._speed
+        gc.phoneme_codepoints = codepoints
+        return self._engine.generate(sentence, config=gc)
+
     def _render(self, sentence: str | None):
         """Synthesise one sentence into (samples, sample_rate)."""
         if not sentence:
             return None
+        if self._use_espeak_frontend:
+            result = self._render_with_espeak(sentence)
+            if result is None:
+                return None
+            samples = np.asarray(result.samples, dtype=np.float32)
+            return (samples, int(result.sample_rate)) if samples.size > 0 else None
         result = self._engine.generate(sentence, sid=self._sid, speed=self._speed)
         samples = np.asarray(result.samples, dtype=np.float32)
         if samples.size == 0:
+            # sherpa-onnx 2.0+ omits bundled GPL espeak-ng; use system espeak-ng IPA.
+            fb = self._render_with_espeak(sentence)
+            if fb is not None:
+                fb_samples = np.asarray(fb.samples, dtype=np.float32)
+                if fb_samples.size > 0:
+                    self._use_espeak_frontend = True
+                    return fb_samples, int(fb.sample_rate)
             return None
         return samples, int(result.sample_rate)
 

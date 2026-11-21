@@ -21,7 +21,7 @@ from mcp_core import Server, ToolError, log, make_tool
 
 # The engine's address. Localhost by default (the app's own rule); ME3_ENGINE_URL
 # lets the Pi deployment or a test point at another port without editing code.
-BASE = os.environ.get("ME3_ENGINE_URL", "http://127.0.0.1:8765").rstrip("/")
+BASE = os.environ.get("ME3_ENGINE_URL", "http://127.0.0.1:8766").rstrip("/")
 TIMEOUT_S = 120
 
 
@@ -93,7 +93,10 @@ def build_server() -> Server:
             ),
             {
                 "role": {"type": "string", "description": "role name, e.g. researcher"},
-                "question": {"type": "string", "description": "the message or question"},
+                "question": {
+                    "type": "string",
+                    "description": "the message or question",
+                },
                 "context": {
                     "type": "string",
                     "description": "short background the agent needs (optional)",

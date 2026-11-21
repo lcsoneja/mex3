@@ -4,7 +4,7 @@
       "name": "asr-mcp",
       "command": [
         "python",
-        "sonj3/asr_mcp.py"
+        "asr_mcp.py"
       ],
       "transport": "stdio"
     },
@@ -12,7 +12,7 @@
       "name": "tts-mcp",
       "command": [
         "python",
-        "sonj3/tts_mcp.py"
+        "tts_mcp.py"
       ],
       "transport": "stdio"
     },
@@ -20,7 +20,7 @@
       "name": "browser-mcp",
       "command": [
         "python",
-        "sonj3/browser_mcp.py"
+        "browser_mcp.py"
       ],
       "transport": "stdio"
     },
@@ -28,7 +28,7 @@
       "name": "computer-mcp",
       "command": [
         "python",
-        "sonj3/computer_mcp.py"
+        "computer_mcp.py"
       ],
       "transport": "stdio"
     },
@@ -36,7 +36,7 @@
       "name": "tasks-mcp",
       "command": [
         "python",
-        "sonj3/tasks_mcp.py"
+        "tasks_mcp.py"
       ],
       "transport": "stdio"
     },
@@ -44,7 +44,15 @@
       "name": "agents-mcp",
       "command": [
         "python",
-        "sonj3/agents_mcp.py"
+        "agents_mcp.py"
+      ],
+      "transport": "stdio"
+    },
+    {
+      "name": "github-mcp",
+      "command": [
+        "python",
+        "github_mcp.py"
       ],
       "transport": "stdio"
     }

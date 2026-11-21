@@ -1,10 +1,12 @@
 {
   "provider": "github-copilot",
-  "model": "github-copilot/gpt-6-luna",
-  "asr_backend": "parakeet",
+  "model": "github-copilot/gpt-5.4-nano",
+  "asr_backend": "moonshine",
+  "classifier_backend": "local-onnx",
+  "active_bookmark": "demo",
   "tts_enabled": true,
-  "tts_voice": "Neural: en_US-lessac-high",
-  "tts_rate": -1,
+  "tts_voice": "Neural: en_US-lessac-medium",
+  "tts_rate": 0,
   "barge_in": true,
   "barge_rms": 0.06,
   "barge_min_ms": 150.0,
@@ -12,7 +14,7 @@
   "vad_min_silence": 0.6,
   "model_memory": "5m",
   "tts_simulate": false,
-  "idle_unload_s": 300.0,
+  "idle_unload_s": 120,
   "openrouter_order": "",
   "session_cost_cap": 0.0,
   "router_enabled": false,
@@ -54,15 +56,13 @@
   "announce_task_completion": true,
   "elevenlabs_amortize_spend": true,
   "bg_voice_scan_always": false,
-  "nova_voice": "Neural: kokoro:af_heart",
-  "piattos_voice": "Neural: kokoro:am_michael",
+  "nova_voice": "Neural: en_US-lessac-medium",
+  "piattos_voice": "Neural: en_US-lessac-medium",
   "barge_triggers": [
     "stop",
     "cancel",
     "quiet",
     "enough",
-    "shush",
-    "wait",
-    "pause"
+    "shush"
   ]
 }

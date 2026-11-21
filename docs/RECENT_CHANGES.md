@@ -7,6 +7,7 @@ This document summarizes everything added and modified since the `7a4310c` Raspb
 ## 1. Quick Orientation for an Incoming Agent
 
 - **Repo & branch:** `https://github.com/lcsoneja/sonj4` (`main`)
+- **Project & user instructions:** [`docs/INSTRUCTIONS.md`](INSTRUCTIONS.md) · original assignment specs: [`docs/Instructions.txt`](Instructions.txt) · classwork benchmark: [`docs/BENCHMARK.md`](BENCHMARK.md)
 - **Primary deliverables added/updated:**
   1. **Task-agnostic Nova prompt v4 & speech sanitizer** (`prompts/front_system_v4.txt`, `server.py`, `agent.py`)
   2. **Half-way conversation interruption & TTS stop fixes** (`server.py`, `tts.py`, `static/index.html`, `bargecheck.py`)

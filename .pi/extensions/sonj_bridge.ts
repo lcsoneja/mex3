@@ -30,39 +30,21 @@ export default function (pi: ExtensionAPI) {
     }
   }
 
-  // Front + Back get device_tool (Front restricted strictly to <1s actions).
+  // Front + Back get full device_tool access (including web, file, and code tools when Front acts independently).
   if (bridgeMode !== "doctor") {
     pi.registerTool({
       name: "device_tool",
       label: "Device Tool",
       description:
-        bridgeMode === "front"
-          ? "Execute ONLY <1s local device actions (get_time, get_weather, calculate, set_timer, set_alarm, set_lights, adjust_lights, adjust_temperature, adjust_volume, media_control, set_reminder, list_reminders, make_call, silence, remember, recall, forget, open_url, open_app). NEVER use for web search, files, code, or long tasks — delegate those to role='back' or 'doctor'."
-          : "Execute a local device/assistant/web tool via SONJ4 (get_time, get_weather, calculate, set_timer, set_alarm, set_lights, adjust_lights, adjust_temperature, adjust_volume, media_control, set_reminder, list_reminders, make_call, silence, remember, recall, forget, web_search, read_page, browse_page, open_url, open_app).",
+        "Execute any local SONJ4 device, assistant, file, code, or web tool (get_time, get_weather, get_stock_price, calculate, set_timer, set_alarm, set_lights, adjust_lights, adjust_temperature, adjust_volume, media_control, set_reminder, list_reminders, make_call, silence, remember, recall, forget, web_search, read_page, browse_page, read_file, write_file, list_files, run_code, tree, cd, pwd, call_api, register_api, open_url, open_app, send_email).",
       parameters: Type.Object({
         name: Type.String({
           description:
-            bridgeMode === "front"
-              ? "Quick tool name only: get_time, get_weather, calculate, set_timer, set_alarm, set_lights, adjust_lights, adjust_temperature, adjust_volume, media_control, set_reminder, list_reminders, make_call, silence, remember, recall, forget, open_url, open_app"
-              : "Tool name, e.g. get_time, set_lights, web_search, browse_page",
+            "SONJ4 tool name, e.g. get_time, get_stock_price, set_lights, web_search, browse_page, read_file, write_file, run_code",
         }),
         arguments: Type.Optional(Type.Record(Type.String(), Type.Unknown(), { description: "Tool JSON arguments" })),
       }),
       async execute(_id, params) {
-        const slowOrWorkerTools = new Set([
-          "web_search", "read_page", "browse_page", "read_file", "write_file",
-          "list_files", "run_code", "tree", "cd", "pwd", "call_api", "register_api",
-          "audio_overview", "send_email",
-        ]);
-        if (bridgeMode === "front" && slowOrWorkerTools.has(String(params.name || "").trim())) {
-          return {
-            content: [{
-              type: "text",
-              text: `Latency boundary: '${params.name}' is forbidden on Front. Delegate immediately using delegate_task(brief, role='back') instead.`,
-            }],
-            details: { blocked_on_front: true, tool: params.name },
-          };
-        }
         const r = await postJson("/api/tool", {
           name: params.name,
           arguments: params.arguments || {},
@@ -76,23 +58,37 @@ export default function (pi: ExtensionAPI) {
     });
   }
 
-  // Back workers get full MCP desktop/browser automation + peer coordination.
-  if (bridgeMode === "back") {
+  // Front gets standard SONJ4 MCP servers; ONLY Back agents get github-mcp.
+  if (bridgeMode === "back" || bridgeMode === "front") {
+    const mcpDesc =
+      bridgeMode === "back"
+        ? "Call a tool on a connected SONJ4 MCP server (asr-mcp, tts-mcp, tasks-mcp, browser-mcp, computer-mcp, agents-mcp, github-mcp). Use github-mcp for GitHub API tasks (repo_overview, create_repo, get_repo, list_repos, get_file, create_or_update_file, edit_file, delete_file, create_branch, list_commits, create_issue, create_pull_request, api_request)."
+        : "Call a tool on a connected SONJ4 MCP server (asr-mcp, tts-mcp, tasks-mcp, browser-mcp, computer-mcp, agents-mcp). Note: github-mcp is Back-only; delegate GitHub API work to role='back'.";
+    const serverDesc =
+      bridgeMode === "back"
+        ? "MCP server name: asr-mcp, tts-mcp, tasks-mcp, browser-mcp, computer-mcp, agents-mcp, or github-mcp"
+        : "MCP server name: asr-mcp, tts-mcp, tasks-mcp, browser-mcp, computer-mcp, or agents-mcp (github-mcp is Back-only)";
     pi.registerTool({
       name: "mcp_call",
       label: "MCP Tool Call",
-      description:
-        "Call a tool on a connected MCP server (computer-mcp for desktop control, browser-mcp for web automation).",
+      description: mcpDesc,
       parameters: Type.Object({
-        server: Type.String({ description: "MCP server name: computer-mcp or browser-mcp" }),
+        server: Type.String({ description: serverDesc }),
         tool: Type.String({ description: "Tool name on that server" }),
         arguments: Type.Optional(Type.Record(Type.String(), Type.Unknown(), { description: "Tool JSON arguments" })),
       }),
       async execute(_id, params) {
+        if (bridgeMode !== "back" && String(params.server || "").trim() === "github-mcp") {
+          return {
+            content: [{ type: "text", text: "github-mcp is restricted to Back agents (back-1..back-5). Delegate GitHub tasks via delegate_task(brief, role='back')." }],
+            details: { ok: false, error: "github-mcp is Back-only" },
+          };
+        }
         const r = await postJson("/api/mcp/call", {
           server: params.server,
           tool: params.tool,
           arguments: params.arguments || {},
+          from_role: agentRole,
         });
         const data: any = r.data;
         let text = "";
@@ -110,11 +106,11 @@ export default function (pi: ExtensionAPI) {
   }
 
   // Shared agent-to-agent coordination tools (Front, Back workers, Doctor)
-  if (bridgeMode === "back" || bridgeMode === "doctor") {
+  if (bridgeMode === "front" || bridgeMode === "back" || bridgeMode === "doctor") {
     pi.registerTool({
       name: "post_community",
       label: "Post to Community",
-      description: "Post a status or coordination message into community · agents talking (independent of Front).",
+      description: "Post a status or coordination message into community · agents talking.",
       parameters: Type.Object({
         message: Type.String({ description: "Short clear coordination message" }),
         to_role: Type.Optional(Type.String({ description: "Target role: front, doctor, back-1..back-5, or all" })),
@@ -128,6 +124,8 @@ export default function (pi: ExtensionAPI) {
         return { content: [{ type: "text", text: JSON.stringify(r.data) }], details: r.data };
       },
     });
+  }
+  if (bridgeMode === "back" || bridgeMode === "doctor") {
     pi.registerTool({
       name: "ask_agent",
       label: "Ask Peer Agent",
@@ -150,7 +148,7 @@ export default function (pi: ExtensionAPI) {
     });
   }
 
-  if (bridgeMode === "doctor") {
+  if (bridgeMode === "doctor" || bridgeMode === "front") {
     pi.registerTool({
       name: "doctor_app_control",
       label: "Doctor App Control",
@@ -178,6 +176,8 @@ export default function (pi: ExtensionAPI) {
         };
       },
     });
+  }
+  if (bridgeMode === "doctor") {
     return;
   }
 

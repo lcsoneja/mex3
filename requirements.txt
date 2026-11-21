@@ -8,6 +8,7 @@ sounddevice>=0.4.6
 soundfile>=0.12
 requests>=2.31
 sherpa-onnx>=1.10
+onnxruntime>=1.17
 psutil>=5.9
 Pillow>=10.0
 

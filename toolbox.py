@@ -13,6 +13,7 @@ import json
 import math
 import operator
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -357,6 +358,17 @@ class ToolBox:
                     }
                 },
                 required=["expression"],
+            ),
+            _function(
+                "get_stock_price",
+                "Look up the live current stock price for a ticker (e.g. AAPL, NVDA, TSLA) or company name (e.g. Apple, Nvidia).",
+                {
+                    "symbol": {
+                        "type": "string",
+                        "description": "ticker symbol or company name, e.g. 'AAPL' or 'Apple'",
+                    }
+                },
+                required=["symbol"],
             ),
             _function(
                 "web_search",
@@ -754,6 +766,7 @@ class ToolBox:
             "set_lights": self._set_lights,
             "get_weather": self._get_weather,
             "calculate": self._calculate,
+            "get_stock_price": self._get_stock_price,
             "web_search": self._web_search,
             "open_url": self._open_url,
             "open_app": self._open_app,
@@ -1564,6 +1577,149 @@ class ToolBox:
         return ToolResult(
             content=f"{city}: {description}, {temp}C (feels like {feels}C), humidity {humidity}%."
         )
+
+    def _get_stock_price(self, symbol: str) -> ToolResult:
+        """Fetch live stock price by ticker, company name, or PH subsidiary (Yahoo + PSE Phisix + web)."""
+        raw = " ".join(str(symbol or "").split()).strip()
+        if not raw:
+            raise ToolError("symbol is required")
+        low = raw.lower()
+        ph_aliases: dict[str, tuple[str, str]] = {
+            "gcash": (
+                "GLO",
+                "GCash (Mynt) is unlisted; parent Globe Telecom Inc. (PSE: GLO)",
+            ),
+            "mynt": (
+                "GLO",
+                "Mynt (GCash) is unlisted; parent Globe Telecom Inc. (PSE: GLO)",
+            ),
+            "globe": ("GLO", "Globe Telecom, Inc. (PSE: GLO)"),
+            "globe telecom": ("GLO", "Globe Telecom, Inc. (PSE: GLO)"),
+            "smart": (
+                "TEL",
+                "Smart Communications is unlisted; parent PLDT Inc. (PSE: TEL)",
+            ),
+            "smart communications": (
+                "TEL",
+                "Smart Communications is unlisted; parent PLDT Inc. (PSE: TEL)",
+            ),
+            "pldt": ("TEL", "PLDT Inc. (PSE: TEL)"),
+            "ayala": ("AC", "Ayala Corporation (PSE: AC)"),
+            "jollibee": ("JFC", "Jollibee Foods Corporation (PSE: JFC)"),
+            "bdo": ("BDO", "BDO Unibank, Inc. (PSE: BDO)"),
+            "bpi": ("BPI", "Bank of the Philippine Islands (PSE: BPI)"),
+            "meralco": ("MER", "Manila Electric Company (PSE: MER)"),
+            "sm": ("SM", "SM Investments Corporation (PSE: SM)"),
+        }
+        pse_sym = ""
+        note = ""
+        if low.endswith(".ps") or low.startswith("pse:"):
+            pse_sym = (
+                re.sub(r"^(pse:)|(\.ps)$", "", low, flags=re.IGNORECASE).strip().upper()
+            )
+            note = f"PSE: {pse_sym}"
+        else:
+            matched_ph: list[tuple[str, str]] = []
+            seen_codes: set[str] = set()
+            words_set = set(re.findall(r"[a-z0-9]+", low))
+            for k, (sym_code, desc) in ph_aliases.items():
+                if (
+                    low == k or (" " in k and k in low) or k in words_set
+                ) and sym_code not in seen_codes:
+                    seen_codes.add(sym_code)
+                    matched_ph.append((sym_code, desc))
+            if len(matched_ph) > 1:
+                parts_out: list[str] = []
+                for sym_code, desc in matched_ph:
+                    sub = self._get_stock_price(f"{sym_code}.PS")
+                    if sub.ok:
+                        parts_out.append(f"{desc}: {sub.content.split(': ', 1)[-1]}")
+                if parts_out:
+                    return ToolResult(content=" | ".join(parts_out))
+            if matched_ph:
+                pse_sym, note = matched_ph[0]
+        hdrs = {"User-Agent": "Mozilla/5.0"}
+        if pse_sym:
+            try:
+                presp = requests.get(
+                    f"https://phisix-api3.appspot.com/stocks/{quote(pse_sym)}.json",
+                    headers=hdrs,
+                    timeout=WEATHER_TIMEOUT_S,
+                )
+                presp.raise_for_status()
+                payload_ps = presp.json()
+                stocks = payload_ps.get("stocks") or payload_ps.get("stock") or []
+                if stocks:
+                    st = stocks[0]
+                    p_info = st.get("price") or {}
+                    amt = p_info.get("amount")
+                    cur = p_info.get("currency") or "PHP"
+                    pct = (
+                        st.get("percentChange")
+                        if st.get("percentChange") is not None
+                        else st.get("percent_change")
+                    )
+                    chg = (
+                        f" ({'+' if float(pct) >= 0 else ''}{float(pct):.2f}%)"
+                        if pct is not None
+                        else ""
+                    )
+                    if amt is not None:
+                        return ToolResult(
+                            content=f"{note}: {float(amt):,.2f} {cur}{chg}."
+                        )
+            except (requests.RequestException, ValueError):
+                pass
+        ticker = raw.upper() if re.fullmatch(r"[A-Za-z0-9.\-^]{1,10}", raw) else ""
+        if not ticker:
+            try:
+                sresp = requests.get(
+                    f"https://query1.finance.yahoo.com/v1/finance/search?q={quote(raw)}&quotesCount=5&newsCount=0",
+                    headers=hdrs,
+                    timeout=WEATHER_TIMEOUT_S,
+                )
+                sresp.raise_for_status()
+                quotes = sresp.json().get("quotes") or []
+                eq = next(
+                    (
+                        q
+                        for q in quotes
+                        if q.get("quoteType") in {"EQUITY", "ETF", "INDEX"}
+                    ),
+                    quotes[0] if quotes else None,
+                )
+                if eq and eq.get("symbol"):
+                    ticker = str(eq["symbol"])
+            except (requests.RequestException, ValueError):
+                ticker = ""
+        if ticker:
+            try:
+                cresp = requests.get(
+                    f"https://query1.finance.yahoo.com/v8/finance/chart/{quote(ticker, safe='^.-')}?interval=1d&range=1d",
+                    headers=hdrs,
+                    timeout=WEATHER_TIMEOUT_S,
+                )
+                cresp.raise_for_status()
+                res = (cresp.json().get("chart") or {}).get("result") or []
+                if res:
+                    meta = res[0].get("meta") or {}
+                    price = meta.get("regularMarketPrice")
+                    prev = meta.get("chartPreviousClose") or meta.get("previousClose")
+                    cur = meta.get("currency") or "USD"
+                    name = meta.get("shortName") or meta.get("longName") or ticker
+                    if price is not None:
+                        chg_txt = ""
+                        if isinstance(prev, (int, float)) and prev:
+                            diff = float(price) - float(prev)
+                            pct = (diff / float(prev)) * 100.0
+                            sign = "+" if diff >= 0 else ""
+                            chg_txt = f" ({sign}{diff:.2f}, {sign}{pct:.2f}%)"
+                        return ToolResult(
+                            content=f"{name} ({ticker}): {float(price):.2f} {cur}{chg_txt}."
+                        )
+            except (requests.RequestException, ValueError):
+                pass
+        return self._web_search(f"{raw} stock price today", recency="day")
 
     def _web_search(self, query: str, recency: str = "any") -> ToolResult:
         """Search the web, preferring recent pages when asked for news."""

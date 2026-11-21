@@ -1181,11 +1181,22 @@ function renderPipeline(){
       flashNote(r && r.ok === false ? 'ASR change failed' : 'ASR updated'); loadPipeline();
     }}));
   asrCard.append(asrCfg);
-  /* Decision Classifier (non-LLM, <100ms, +10% Front bias) */
+  /* Decision Classifier (default local-onnx <1ms, +10% Front bias, plus OpenRouter options) */
   const clf = st.classifier || {};
   const clfCard = card('classifier', '2.5 · Decision Classifier', clf);
-  clfCard.append(el('div', {class:'plcfg'},
-    el('div', {class:'pllat', text:'Non-LLM · choices: front | back | doctor · +10% Front bias · <100ms'})));
+  const clfOpts = clf.options || [{id: clf.active || 'local-onnx', label: clf.active || 'local-onnx', ready: true}];
+  const clfSel = el('select', {id:'pl-clf-backend'}, clfOpts.map(o =>
+    el('option', {value:o.id, text:(o.label || o.id) + (o.ready === false ? ' [needs key]' : ''), selected:o.id === (clf.active || 'local-onnx') ? '' : null})));
+  const clfCfg = el('div', {class:'plcfg'},
+    el('label', {}, 'classifier'), clfSel,
+    el('button', {class:'btn', type:'button', text:'Apply Classifier', onclick:async () => {
+      const val = $('pl-clf-backend').value;
+      const r = await api('/api/settings', {classifier_backend:val});
+      flashNote(r && r.ok === false ? 'Classifier update failed' : ('Classifier: ' + val));
+      loadPipeline();
+    }}),
+    el('div', {class:'pllat', text:'Default: local-onnx (<1ms) · +10% Front bias · local-rules & OpenRouter alternatives available'}));
+  clfCard.append(clfCfg);
   /* LLM */
   const llm = st.llm || {};
   const llmCard = card('llm', '3 · LLM (Front)', llm);
@@ -1708,7 +1719,7 @@ async function loadMcp(){
   const arr = r.servers || [];
   $('mcp-sub').textContent = arr.length + ' servers';
   const cards = arr.map(sv => el('div', {class:'card'},
-    el('div', {class:'row'}, el('b', {text:sv.name || 'server'}), el('span', {class:'pill', text:sv.transport || '?'})),
+    el('div', {class:'row'}, el('b', {text:sv.name || 'server'}), el('span', {class:'pill', text:sv.transport || '?'}), sv.scope ? el('span', {class:'pill ' + (sv.scope === 'back-only' ? 'warn' : 'ok'), text:sv.scope}) : null),
     el('div', {class:'sub', text:sv.status || ''}),
     el('div', {class:'kv', text:'tools: ' + ((sv.tools||[]).join(', ') || '—')})));
   if (r.registry) cards.push(el('div', {class:'sub', text:r.registry}));
@@ -1719,9 +1730,18 @@ function renderAgents(){
   const roles = Object.keys(cfg);
   setKids($('agents-body'), roles.length ? roles.map(role => {
     if (role === 'classifier' || cfg[role].kind === 'classifier'){
+      const opts = (state.classifier || {}).options || [];
+      const cur = (state.settings || {}).classifier_backend || cfg[role].model || 'local-onnx';
+      const sel = el('select', {id:'agent-classifier-backend', style:'width:100%', onchange:async (ev) => {
+        await api('/api/settings', {classifier_backend: ev.target.value});
+        flashNote('Classifier switched to ' + ev.target.value);
+        refresh();
+      }}, (opts.length ? opts : [{id:cur, label:cur, ready:true}]).map(o =>
+        el('option', {value:o.id, text:(o.label || o.id) + (o.ready === false ? ' [needs key]' : ''), selected:o.id === cur ? '' : null})));
       return el('div', {class:'card'},
-        el('div', {class:'row'}, el('b', {text:'classifier (non-LLM)'}), el('span', {class:'pill ok', text:'<100ms · +10% Front bias'})),
-        el('div', {class:'sub', text:cfg[role].description || 'Deterministic + ONNX decision classifier (no LLM)'}));
+        el('div', {class:'row'}, el('b', {text:'classifier'}), el('span', {class:'pill ok', text:cur + ' · +10% Front bias'})),
+        sel,
+        el('div', {class:'sub', style:'margin-top:6px', text:cfg[role].description || 'Local ONNX default (<1ms) + selectable OpenRouter/rules classifiers'}));
     }
     const sel = modelSelect(cfg[role].model, 'model for ' + role);
     sel.id = 'agent-' + role;
@@ -1763,8 +1783,8 @@ function renderSettings(){
   wakeLockToggle.checked = st.wake_speaker_lock !== false;
   const idleWakeToggle = el('input', {id:'require-wake-when-idle', type:'checkbox', style:'width:auto;margin-right:8px'});
   idleWakeToggle.checked = st.require_wake_when_idle !== false;
-  const localLlmToggle = el('input', {id:'allow-local-llm', type:'checkbox', style:'width:auto;margin-right:8px'});
-  localLlmToggle.checked = Boolean(st.allow_local_llm);
+  const localLlmToggle = el('input', {id:'allow-local-llm', type:'checkbox', disabled:'', style:'width:auto;margin-right:8px'});
+  localLlmToggle.checked = false;
   const annToggle = el('input', {id:'announce-task-completion', type:'checkbox', style:'width:auto;margin-right:8px'});
   annToggle.checked = st.announce_task_completion !== false;
   const elAmortToggle = el('input', {id:'elevenlabs-amortize-spend', type:'checkbox', style:'width:auto;margin-right:8px'});
@@ -1773,7 +1793,100 @@ function renderSettings(){
   paidToggle.checked = Boolean(st.paid_models_enabled);
   const frontPiToggle = el('input', {id:'front-uses-pi', type:'checkbox', style:'width:auto;margin-right:8px'});
   frontPiToggle.checked = st.front_uses_pi !== false;
+  const bms = s.bookmarks || [];
+  const activeBm = s.active_bookmark || st.active_bookmark || '';
+  const bmCard = el('div', {class:'card'},
+    el('div', {class:'row'},
+      el('b', {text:'Settings Bookmarks'}),
+      el('span', {class:'pill ok', text: activeBm ? ('active: ' + activeBm) : 'custom'})),
+    el('div', {class:'sub', style:'margin-bottom:6px', text:'1-click presets tuned for Raspberry Pi (Ollama stays disabled on all presets)'}),
+    el('div', {style:'display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px'},
+      bms.map(b => {
+        const wrap = el('span', {style:'display:inline-flex;align-items:center;gap:2px'});
+        const btn = el('button', {
+          class: b.id === activeBm ? 'btn primary' : 'btn',
+          type: 'button',
+          title: b.description || '',
+          text: b.name,
+          onclick: async () => {
+            const r = await api('/api/bookmarks/apply', {id: b.id});
+            flashNote(r && r.ok ? ('Applied bookmark: ' + b.name) : ('Bookmark error: ' + ((r && r.error) || 'failed')));
+            await poll();
+            renderSettings();
+          }
+        });
+        wrap.append(btn);
+        if (!b.builtin){
+          wrap.append(el('button', {
+            class:'btn',
+            type:'button',
+            title:'Delete bookmark',
+            style:'padding:2px 6px',
+            text:'×',
+            onclick: async () => {
+              await api('/api/bookmarks/delete', {id: b.id});
+              await poll();
+              renderSettings();
+            }
+          }));
+        }
+        return wrap;
+      })),
+    el('div', {class:'srow', style:'gap:6px'},
+      el('input', {id:'bm-new-name', placeholder:'New bookmark name (e.g. Lab Demo)…', style:'flex:1'}),
+      el('button', {class:'btn', type:'button', text:'+ Save Bookmark', onclick:async () => {
+        const inp = $('bm-new-name');
+        const name = (inp && inp.value || '').trim();
+        if (!name){ flashNote('Enter a bookmark name'); return; }
+        const r = await api('/api/bookmarks/save', {name});
+        if (inp) inp.value = '';
+        flashNote(r && r.ok ? ('Saved bookmark: ' + name) : 'Could not save bookmark');
+        await poll();
+        renderSettings();
+      }})));
+  const gh = s.github_auth || {};
+  const ghScopeTxt = (gh.scopes && gh.scopes.length) ? gh.scopes.join(', ') : (gh.token_kind === 'fine-grained' ? 'fine-grained' : '');
+  const ghCard = el('div', {class:'card'},
+    el('div', {class:'row'},
+      el('b', {text:'GitHub API Auth (Back-only MCP)'}),
+      el('span', {
+        id:'gh-auth-pill',
+        class: gh.signed_in ? (gh.has_repo_scope === false ? 'pill warn' : 'pill ok') : 'pill warn',
+        text: gh.signed_in ? ('signed in: @' + (gh.login || 'ready') + (ghScopeTxt ? ' (' + ghScopeTxt + ')' : '')) : 'not signed in'
+      })),
+    el('div', {class:'sub', style:'margin-bottom:6px', text:'Only Back agents (back-1..back-5) can use github-mcp (create public repos, read/write/edit files, issues, PRs). Front delegates GitHub tasks to Back. Stored securely in ~/.sonj4-github-token (ready on every launch).'}),
+    el('div', {class:'srow', style:'gap:6px;flex-wrap:wrap'},
+      el('a', {
+        class:'btn',
+        href: gh.token_url || 'https://github.com/settings/tokens/new?description=SONJ4-Back-MCP&scopes=repo,read:user,delete_repo',
+        target:'_blank',
+        rel:'noopener',
+        text:'1. Get GitHub Token'
+      }),
+      el('input', {id:'gh-token-input', type:'password', placeholder:'Paste GitHub API token (ghp_... or github_pat_...)', style:'flex:1;min-width:210px'}),
+      el('button', {class:'btn primary', type:'button', text:'Sign In', onclick:async () => {
+        const inp = $('gh-token-input');
+        const tok = (inp && inp.value || '').trim();
+        if (!tok){ flashNote('Paste your GitHub token first'); return; }
+        const r = await api('/api/github/auth', {token: tok});
+        if (inp) inp.value = '';
+        if (r && r.ok){
+          flashNote('GitHub signed in as @' + (r.login || '?'));
+        } else {
+          flashNote('GitHub auth failed: ' + ((r && r.error) || 'invalid token'));
+        }
+        await poll();
+        renderSettings();
+      }}),
+      gh.signed_in ? el('button', {class:'btn danger', type:'button', text:'Sign Out', onclick:async () => {
+        await api('/api/github/logout', {});
+        flashNote('Signed out of GitHub API');
+        await poll();
+        renderSettings();
+      }}) : null));
   setKids($('settings-body'),
+    bmCard,
+    ghCard,
     el('div', {class:'card'},
       el('div', {class:'row'}, el('b', {text:'Learned this session'}),
         el('button', {class:'btn', id:'btn-clear-profile', type:'button', text:'Clear'})),
@@ -1787,8 +1900,8 @@ function renderSettings(){
         el('span', {text:'Multi-master wake lock — anyone who says "Nova" joins active masters (5 min idle timeout)'})),
       el('label', {class:'srow', style:'cursor:pointer;margin-top:4px'}, idleWakeToggle,
         el('span', {text:'Stay quiet when idle — after 5 min timeout, require "Nova" before replying'})),
-      el('label', {class:'srow', style:'cursor:pointer;margin-top:4px'}, localLlmToggle,
-        el('span', {text:'Allow local Ollama LLMs (keep OFF to save RAM)'})),
+      el('label', {class:'srow', style:'opacity:0.7;margin-top:4px'}, localLlmToggle,
+        el('span', {text:'Local Ollama LLMs disabled on Raspberry Pi (prevents thermal/CPU overload)'})),
       el('label', {class:'srow', style:'cursor:pointer;margin-top:4px'}, annToggle,
         el('span', {text:'Auto-announce completed tasks — Front speaks completion iff idle & available'})),
       el('label', {class:'srow', style:'cursor:pointer;margin-top:4px'}, elAmortToggle,
@@ -1864,8 +1977,9 @@ function groupedOptions(catalog, filter){
   const f = String(filter || '').toLowerCase();
   const groups = new Map();
   for (const m of catalog){
+    if (m.provider === 'Ollama') continue;
     if (f && !((m.id || '') + ' ' + (m.group || '') + ' ' + (m.provider || '')).toLowerCase().includes(f)) continue;
-    const key = m.provider === 'Ollama' ? 'Ollama' : m.provider + ' / ' + m.group;
+    const key = m.provider + ' / ' + m.group;
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(m);
   }

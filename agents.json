@@ -1,6 +1,6 @@
 {
   "front": {
-    "model": "github-copilot/gpt-5.4-nano",
+    "model": "github-copilot/gpt-6-luna",
     "fallbacks": [
       "cohere/north-mini-code:free",
       "nvidia/nemotron-3.5-super-vl:free",
@@ -8,7 +8,8 @@
     ],
     "thinking": "off",
     "role_kind": "coordinator",
-    "description": "Owner's voice companion and coordinator (<2s turns + delegation)"
+    "tools": "read, bash, edit, write, grep, find, ls, mcp, mcp_call, web_search, fetch_content, memory, attach_files, device_tool, doctor_app_control, delegate_task, ask_agent, start_crew, post_community",
+    "description": "Owner's voice companion with bash, files, Pi MCP, web, memory & Back-pool delegation"
   },
   "doctor": {
     "model": "github-copilot/gpt-6-luna",
@@ -21,8 +22,17 @@
     "description": "App doctor: investigates issues, logs, internals, settings, and catalogue repairs"
   },
   "classifier": {
-    "model": "deterministic/decision-classifier-v1",
-    "fallbacks": [],
+    "model": "local-onnx",
+    "fallbacks": [
+      "local-rules",
+      "openrouter/perplexity/pplx-decider-flash-v1.3:free",
+      "openrouter/parallel/decisions-fast",
+      "openrouter/perplexity/pplx-decider-v1.3:free",
+      "openrouter-chat:liquid/lfm-3-1.7b:free",
+      "openrouter/openai/gpt-6-luna-decisions",
+      "openrouter/~typesafe/jev-latest",
+      "openrouter/liquid/d1.2"
+    ],
     "thinking": "off",
     "kind": "classifier",
     "deadline_ms": 90,
@@ -32,7 +42,7 @@
       "back",
       "doctor"
     ],
-    "description": "Non-LLM Decision Classifier (<100ms, +10% Front bias) between user and Front"
+    "description": "Default local ONNX Decision Classifier (<1ms, +10% Front bias) with selectable OpenRouter/rules alternatives"
   },
   "back-1": {
     "model": "github-copilot/gpt-6-luna",
@@ -44,9 +54,9 @@
     "thinking": "medium",
     "max_parallel": 5,
     "max_steps": 12,
-    "tools": "pi, device, files, mcp",
+    "tools": "pi, device, files, mcp, github-mcp",
     "role_kind": "worker",
-    "description": "Always-warm generalist worker #1 (build, research, critic/verify, summarize, automate)"
+    "description": "Always-warm generalist worker #1 (build, research, critic/verify, summarize, automate, github-mcp)"
   },
   "back-2": {
     "model": "github-copilot/gpt-6-luna",
@@ -58,9 +68,9 @@
     "thinking": "medium",
     "max_parallel": 5,
     "max_steps": 12,
-    "tools": "pi, device, files, mcp",
+    "tools": "pi, device, files, mcp, github-mcp",
     "role_kind": "worker",
-    "description": "Always-warm generalist worker #2 (build, research, critic/verify, summarize, automate)"
+    "description": "Always-warm generalist worker #2 (build, research, critic/verify, summarize, automate, github-mcp)"
   },
   "back-3": {
     "model": "github-copilot/gpt-6-luna",
@@ -72,9 +82,9 @@
     "thinking": "medium",
     "max_parallel": 5,
     "max_steps": 12,
-    "tools": "pi, device, files, mcp",
+    "tools": "pi, device, files, mcp, github-mcp",
     "role_kind": "worker",
-    "description": "Always-warm generalist worker #3 (build, research, critic/verify, summarize, automate)"
+    "description": "Always-warm generalist worker #3 (build, research, critic/verify, summarize, automate, github-mcp)"
   },
   "back-4": {
     "model": "github-copilot/gpt-6-luna",
@@ -86,22 +96,22 @@
     "thinking": "medium",
     "max_parallel": 5,
     "max_steps": 12,
-    "tools": "pi, device, files, mcp",
+    "tools": "pi, device, files, mcp, github-mcp",
     "role_kind": "worker",
-    "description": "Always-warm generalist worker #4 (build, research, critic/verify, summarize, automate)"
+    "description": "Always-warm generalist worker #4 (build, research, critic/verify, summarize, automate, github-mcp)"
   },
   "back-5": {
     "model": "github-copilot/gpt-6-luna",
     "fallbacks": [
+      "qwen2.5-coder:7b",
       "deepseek/deepseek-v4.1-flash",
-      "cohere/north-mini-code:free",
-      "nvidia/nemotron-3.5-super-vl:free"
+      "cohere/north-mini-code:free"
     ],
     "thinking": "medium",
     "max_parallel": 5,
     "max_steps": 12,
-    "tools": "pi, device, files, mcp",
+    "tools": "pi, device, files, mcp, github-mcp",
     "role_kind": "worker",
-    "description": "Always-warm generalist worker #5 (build, research, critic/verify, summarize, automate)"
+    "description": "Always-warm generalist worker #5 (build, research, critic/verify, summarize, automate, github-mcp)"
   }
 }

@@ -69,6 +69,12 @@ def run_unit() -> int:
             and "stop and listen" in low,
             "missing required deck directive",
         )
+    pfile_txt = pfile.read_text(encoding="utf-8").strip()
+    check(
+        "front_prompt_single_source_exact_match",
+        front_prompt.strip() == pfile_txt == DEFAULT_SYSTEM_PROMPT.strip(),
+        f"lens=({len(front_prompt.strip())},{len(pfile_txt)},{len(DEFAULT_SYSTEM_PROMPT.strip())})",
+    )
 
     # 2. Never read markdown or URLs aloud
     dirty = "**Hello** `world`! Check [the Python docs](https://docs.python.org/3/library/pathlib.html) and visit https://example.com/a/b?x=1 #note"
@@ -305,7 +311,7 @@ def _wait_idle(
 
 
 def run_live(port: int) -> int:
-    from playwright.sync_api import sync_playwright
+    from playwright.sync_api import sync_playwright  # type: ignore[import-not-found]
 
     base = f"http://127.0.0.1:{port}"
     orig_st = _http(base, "/api/state").get("settings") or {}

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import queue
 import subprocess
 import sys
@@ -24,7 +25,13 @@ class McpProtocolError(RuntimeError):
 class McpClient:
     """Manage one MCP server process and exchange JSON-RPC messages over stdio."""
 
-    def __init__(self, name: str, command: Sequence[str], timeout: float = 30.0) -> None:
+    def __init__(
+        self,
+        name: str,
+        command: Sequence[str],
+        timeout: float = 30.0,
+        env: dict[str, str] | None = None,
+    ) -> None:
         if isinstance(command, str) or not command:
             raise ValueError("command must be a non-empty sequence of arguments")
         if timeout <= 0:
@@ -42,6 +49,7 @@ class McpClient:
         self._failed = False
         self._stdout_thread: threading.Thread | None = None
         self._stderr_thread: threading.Thread | None = None
+        self.env = dict(env) if env else {}
         self.server_info: dict[str, Any] = {}
 
     @property
@@ -65,6 +73,7 @@ class McpClient:
             errors="replace",
             bufsize=1,
             cwd=str(BASE),
+            env={**os.environ, **self.env} if self.env else None,
         )
         self._stdout_thread = threading.Thread(target=self._read_stdout, daemon=True)
         self._stderr_thread = threading.Thread(target=self._read_stderr, daemon=True)
@@ -131,7 +140,9 @@ class McpClient:
     def __exit__(self, exc_type: object, exc: object, traceback: object) -> None:
         self.close()
 
-    def _request(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def _request(
+        self, method: str, params: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         with self._request_lock:
             process = self.process
             if process is None or self._closed or self._failed:
@@ -152,30 +163,42 @@ class McpClient:
                 process.stdin.flush()
             except (BrokenPipeError, OSError) as exc:
                 self._failed = True
-                raise RuntimeError(f"{self.name}: could not write to server: {self._stderr_tail()}") from exc
+                raise RuntimeError(
+                    f"{self.name}: could not write to server: {self._stderr_tail()}"
+                ) from exc
             try:
                 line = self._responses.get(timeout=self.timeout)
             except queue.Empty as exc:
                 self._failed = True
-                raise TimeoutError(f"{self.name}: timed out waiting for {method}") from exc
+                raise TimeoutError(
+                    f"{self.name}: timed out waiting for {method}"
+                ) from exc
             if line is None:
                 self._failed = True
-                raise RuntimeError(f"{self.name}: server closed stdout: {self._stderr_tail()}")
+                raise RuntimeError(
+                    f"{self.name}: server closed stdout: {self._stderr_tail()}"
+                )
             try:
                 response = json.loads(line)
             except json.JSONDecodeError as exc:
                 self._failed = True
-                raise McpProtocolError(f"{self.name}: non-JSON stdout: {line.strip()[:120]!r}") from exc
+                raise McpProtocolError(
+                    f"{self.name}: non-JSON stdout: {line.strip()[:120]!r}"
+                ) from exc
             if not isinstance(response, dict) or response.get("id") != request_id:
                 self._failed = True
-                raise McpProtocolError(f"{self.name}: unexpected JSON-RPC response: {response!r}")
+                raise McpProtocolError(
+                    f"{self.name}: unexpected JSON-RPC response: {response!r}"
+                )
             if "error" in response:
                 error = response["error"]
                 raise McpProtocolError(f"{self.name}: {method} failed: {error}")
             result = response.get("result")
             if not isinstance(result, dict):
                 self._failed = True
-                raise McpProtocolError(f"{self.name}: {method} returned no result object")
+                raise McpProtocolError(
+                    f"{self.name}: {method} returned no result object"
+                )
             return result
 
     def _notify(self, method: str) -> None:
@@ -213,5 +236,7 @@ def discover_servers() -> list[dict[str, Any]]:
     for name, script in (("asr", "asr_mcp.py"), ("tts", "tts_mcp.py")):
         path = BASE / script
         if path.is_file():
-            servers.append({"name": name, "command": [sys.executable, str(path.resolve())]})
+            servers.append(
+                {"name": name, "command": [sys.executable, str(path.resolve())]}
+            )
     return servers

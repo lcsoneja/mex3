@@ -2,6 +2,8 @@
 *.key
 openrouter.key
 elevenlabs.key
+github.key
+github_askpass.py
 .env
 .env.*
 
@@ -23,7 +25,10 @@ dist/
 *.zip
 
 # Large model weights (downloaded by setup_models.py; keep out of git)
-models/
+models/*
+!models/classifier/
+!models/classifier/*
+projects/
 
 # Backup configs
 *.bak

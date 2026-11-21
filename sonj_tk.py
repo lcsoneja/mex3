@@ -25,7 +25,9 @@ import requests
 
 from doctorpane import DoctorPane
 
-BASE = "http://127.0.0.1:8765"
+DEFAULT_PORT = 8766
+PORT = DEFAULT_PORT
+BASE = os.environ.get("SONJ_URL", f"http://127.0.0.1:{DEFAULT_PORT}").rstrip("/")
 
 
 def api_json(path: str, body: dict | None = None) -> dict[str, Any]:
@@ -167,6 +169,7 @@ class SonjTk:
         self._build_rail()
         # RULE-39: count open windows so the engine closes only with the last one
         cf = Path(__file__).resolve().parent / "out" / "sonj_windows.count"
+        cf.parent.mkdir(parents=True, exist_ok=True)
         try:
             cf.write_text(
                 str(int(cf.read_text(encoding="utf-8").strip() or "0") + 1),
@@ -596,7 +599,7 @@ class SonjTk:
 
         engine = Path(__file__).resolve().parent / "server.py"
         subprocess.Popen(
-            [sys.executable, str(engine), "--port", "8765"],
+            [sys.executable, str(engine), "--port", str(PORT), "--no-browser"],
             cwd=str(Path(__file__).resolve().parent),
         )
         # The engine writes its own pid file while claiming the lock; a window
@@ -650,7 +653,16 @@ class SonjTk:
         self.root.mainloop()
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    import argparse
+
+    ap = argparse.ArgumentParser(description="SONJ Tkinter desktop app")
+    ap.add_argument("--port", type=int, default=DEFAULT_PORT)
+    args = ap.parse_args(argv)
+    global PORT, BASE
+    PORT = int(args.port)
+    if not os.environ.get("SONJ_URL") or args.port != DEFAULT_PORT:
+        BASE = f"http://127.0.0.1:{PORT}"
     app = SonjTk()
     app.run()
     return 0

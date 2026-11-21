@@ -521,22 +521,25 @@ def cmd_app(args: argparse.Namespace) -> int:
         rc = cmd_start(argparse.Namespace(port=args.port, profile=args.profile))
         if rc != 0:
             return rc
-    native = False
+    window_ok = False
     try:
         sys.path.insert(0, str(ROOT))
-        from app_window import native_ready
+        from app_window import window_ready
 
-        native = native_ready()
+        window_ok = window_ready()
     except Exception as exc:  # noqa: BLE001 - a missing native runtime just falls back
-        print("native console unavailable:", type(exc).__name__, exc)
-    if native:
+        print("console window unavailable:", type(exc).__name__, exc)
+    if window_ok:
         proc = subprocess.Popen(
             [_pythonw(), str(ROOT / "app_window.py"), "--port", str(args.port)],
             cwd=str(ROOT),
         )
         print(f"agent console window started (pid {proc.pid})")
         return 0
-    proc = subprocess.Popen([_pythonw(), str(ROOT / "sonj_tk.py")], cwd=str(ROOT))
+    proc = subprocess.Popen(
+        [_pythonw(), str(ROOT / "sonj_tk.py"), "--port", str(args.port)],
+        cwd=str(ROOT),
+    )
     print(f"standalone app started (pid {proc.pid})")
     return 0
 
@@ -862,14 +865,27 @@ def cmd_stop(args: argparse.Namespace) -> int:
 
 
 def cmd_restart(args: argparse.Namespace) -> int:
+    if _alive():
+        _http("/api/shutdown", method="POST", body={})
+        print("requested graceful shutdown")
     pid = _engine_process()
     if pid:
         try:
             os.kill(int(pid), signal.SIGTERM)
             print(f"sent stop to engine pid {pid}")
-            time.sleep(2)
-        except Exception as exc:  # noqa: BLE001
-            print("could not stop:", exc)
+        except OSError:
+            pass
+    for _ in range(20):
+        if not _alive() and not _engine_process():
+            break
+        time.sleep(0.4)
+    pid = _engine_process()
+    if pid:
+        try:
+            os.kill(int(pid), signal.SIGKILL)
+            time.sleep(0.5)
+        except OSError:
+            pass
     return cmd_start(argparse.Namespace(port=args.port, profile=args.profile))
 
 
@@ -1009,6 +1025,52 @@ def cmd_bench_roles(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_github_login(args: argparse.Namespace) -> int:
+    from github_auth import GITHUB_TOKEN_CREATE_URL, save_github_token
+
+    if getattr(args, "web", False):
+        import webbrowser
+
+        print(f"Opening {GITHUB_TOKEN_CREATE_URL}")
+        webbrowser.open(GITHUB_TOKEN_CREATE_URL)
+    print(f"Create a token with 'repo' scope if needed: {GITHUB_TOKEN_CREATE_URL}")
+    tok = getpass.getpass("Paste GitHub API token (hidden): ").strip()
+    if not tok:
+        print("Aborted: empty token.")
+        return 1
+    try:
+        info = save_github_token(tok)
+    except ValueError as exc:
+        print(f"GitHub login failed: {exc}")
+        return 1
+    if _alive():
+        _http("/api/github/auth", method="POST", body={"token": tok})
+    scopes = ", ".join(info.get("scopes") or []) or info.get("token_kind", "")
+    print(f"GitHub signed in as @{info.get('login')} ({scopes}) — ready for Back agents.")
+    return 0
+
+
+def cmd_github_status(_args: argparse.Namespace) -> int:
+    from github_auth import github_auth_status
+
+    st = github_auth_status(verify_remote=True)
+    if st.get("signed_in"):
+        scopes = ", ".join(st.get("scopes") or []) or st.get("token_kind", "")
+        print(f"GitHub signed in: @{st.get('login')} ({scopes}) [{st.get('source')}]")
+        return 0
+    print(f"GitHub not signed in ({st.get('error') or 'no token'}). Run: sonj4 github-login")
+    return 1
+
+
+def cmd_github_logout(_args: argparse.Namespace) -> int:
+    from github_auth import clear_github_token
+
+    clear_github_token()
+    if _alive():
+        _http("/api/github/logout", method="POST", body={})
+    print("Signed out of GitHub API.")
+    return 0
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="sonj", description="SONJ - voice agent command line"
@@ -1129,13 +1191,24 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_latency.set_defaults(func=cmd_latency)
 
+    p_gh_login = sub.add_parser("github-login", help="sign in to GitHub API for Back-only github-mcp")
+    p_gh_login.add_argument("--web", action="store_true", help="open GitHub token creation page in browser")
+    p_gh_login.set_defaults(func=cmd_github_login)
+
+    p_gh_status = sub.add_parser("github-status", help="check GitHub API login status for Back agents")
+    p_gh_status.set_defaults(func=cmd_github_status)
+
+    p_gh_logout = sub.add_parser("github-logout", help="remove stored GitHub API token")
+    p_gh_logout.set_defaults(func=cmd_github_logout)
+
     args = parser.parse_args(argv)
     if not os.environ.get("SONJ_URL"):
         global BASE_URL
         BASE_URL = f"http://127.0.0.1:{args.port}"
     if not args.cmd:
         # RULE-1 (owner, 2026-11-15): bare sonj opens the STANDALONE app. Never a browser.
-        if (args.profile or _active_profile()) == "pi":
+        has_gui = bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
+        if (args.profile or _active_profile()) == "pi" and not has_gui:
             return cmd_start(args)
         rc = cmd_app(args)
         if rc != 0 or getattr(args, "no_dash", False) or not sys.stdout.isatty():
